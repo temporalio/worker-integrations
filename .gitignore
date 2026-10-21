@@ -1,0 +1,49 @@
+*.log
+dist/
+.DS_Store
+
+# Go
+go.work
+go.work.sum
+*.test
+*.out
+
+# Java
+.gradle/
+build/
+java/*/bin/
+
+# Python
+*.py[cod]
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.venv/
+__pycache__/
+junit/
+
+# TypeScript (scoped, since lib/ is source in Ruby gems)
+node_modules/
+typescript/**/lib/
+*.tsbuildinfo
+.test-results/
+
+# .NET
+dotnet/**/bin/
+obj/
+TestResults/
+*.user
+.vs/
+*.nupkg
+*.snupkg
+
+# Ruby
+.bundle/
+vendor/bundle/
+pkg/
+*.gem
+.yardoc/
+coverage/
+
+# Rust
+target/

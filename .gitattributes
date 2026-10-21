@@ -1,0 +1,22 @@
+# Normalize line endings: everything is committed with LF, including on Windows checkouts.
+# This also keeps .NET Source Link checksums valid, since GitHub serves the committed LF bytes.
+* text=auto eol=lf
+
+# Windows-only scripts (e.g. gradlew.bat) need CRLF to run.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary assets
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.jar binary
+*.whl binary
+*.nupkg binary
+*.snupkg binary
+*.tgz binary
+*.tar.gz binary
+*.zip binary
