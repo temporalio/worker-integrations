@@ -1,4 +1,6 @@
-# AGENTS.md — temporalio/worker-integrations
+<!-- AGENTS.md is symlinked to CLAUDE.md — they are the same file. -->
+
+# Temporal SDK worker integrations
 
 Normative guide for humans and coding agents working in this repository. Other documents
 (`README.md`, `CONTRIBUTING.md`) are short and link here.
