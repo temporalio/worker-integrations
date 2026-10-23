@@ -1,0 +1,81 @@
+# Repository CI entry point. One workflow for every language; per-language jobs call a
+# reusable workflow once per changed package (never a per-package copy).
+#
+#   changes    -> which packages the event touches (scripts/ci/detect_changes.py)
+#   tooling    -> tests for the repository tooling under scripts/ (always)
+#   ci-status  -> the ONLY required status check; skipped jobs count as success
+name: CI
+
+on:
+  pull_request:
+    # `edited` covers base-branch retargeting (a stacked PR whose base merged), so `changes`
+    # is recomputed against the new base instead of keeping the stale selection.
+    types: [opened, synchronize, reopened, edited, labeled, unlabeled]
+  merge_group:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      any: ${{ steps.detect.outputs.any }}
+      mode: ${{ steps.detect.outputs.mode }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Detect changed packages
+        id: detect
+        env:
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GITHUB_BASE_REF: ${{ github.base_ref }}
+          MERGE_GROUP_BASE_SHA: ${{ github.event.merge_group.base_sha }}
+          MERGE_GROUP_HEAD_SHA: ${{ github.event.merge_group.head_sha }}
+        run: python3 scripts/ci/detect_changes.py --github-output "$GITHUB_OUTPUT"
+
+  tooling:
+    name: Repository tooling tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version-file: scripts/pyproject.toml
+          enable-cache: true
+          cache-dependency-glob: scripts/uv.lock
+      - name: Tooling unit tests
+        run: uv run --project scripts --locked pytest scripts/tests -q
+
+  ci-status:
+    name: ci-status
+    needs: [changes, tooling]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Evaluate required jobs
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          echo "$NEEDS"
+          if echo "$NEEDS" | jq -e 'to_entries | map(.value.result) | any(. == "failure" or . == "cancelled")' > /dev/null; then
+            echo "::error::A required job failed or was cancelled"
+            exit 1
+          fi
+          echo "All required jobs succeeded or were skipped"
