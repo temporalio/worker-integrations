@@ -9,6 +9,7 @@ Checks (see AGENTS.md):
     starts with `_` / `.`
   * every package has a valid integration.toml
   * every package's LICENSE is a regular file byte-identical to the root LICENSE; no CHANGELOG
+  * language-specific checks, for languages with a module in scripts/lib/languages/
 """
 
 from __future__ import annotations
@@ -27,6 +28,7 @@ from lib.common import (  # noqa: E402
     repo_root,
 )
 from lib.integration_toml import IntegrationMeta, IntegrationTomlError  # noqa: E402
+from lib.languages import TOOLED_LANGUAGES  # noqa: E402
 
 LANGUAGE_LOCKFILES = (
     "uv.lock", "pnpm-lock.yaml", "package-lock.json", "yarn.lock", "go.sum", "gradle.lockfile",
@@ -113,8 +115,13 @@ class Checker:
         discovered = discover_packages(self.root)
         self.check_language_roots(discovered)
         for language in LANGUAGES:
+            tooled = TOOLED_LANGUAGES.get(language)
+            if tooled:
+                tooled.check_root(self)
             for package in discovered[language]:
-                self.check_package(package)
+                meta = self.check_package(package)
+                if tooled:
+                    tooled.check_package(self, package, meta)
         return self.violations
 
 

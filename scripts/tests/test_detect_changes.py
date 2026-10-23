@@ -100,7 +100,6 @@ def test_package_file_selects_only_that_package(repo: Path, path: str) -> None:
 
 def test_shared_language_file_selects_all_packages_of_that_language(repo: Path) -> None:
     base = _setup(repo)
-    assert _run(repo, base, "python/README.md")["python"] == ["alpha", "beta"]
     r = _run(repo, base, "python/_shared/python.mk")
     assert r["python"] == ["alpha", "beta"]
     assert r["go"] == []
@@ -115,7 +114,7 @@ def test_workflows_ci_scripts_and_license_select_everything(repo: Path, path: st
     assert r["mode"] == "all"
 
 
-@pytest.mark.parametrize("path", ["README.md", "scripts/tests/y.py"])
+@pytest.mark.parametrize("path", ["README.md", "python/README.md", "scripts/tests/y.py"])
 def test_other_files_select_nothing(repo: Path, path: str) -> None:
     base = _setup(repo)
     r = _run(repo, base, path)

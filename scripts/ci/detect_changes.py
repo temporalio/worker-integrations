@@ -8,6 +8,7 @@ Rules:
     unusable diff base                       -> every package of every language
   * .github/**, scripts/{ci,lib}/**, LICENSE -> every package of every language
   * <lang>/<package>/**                      -> that package (the innermost one, if packages nest)
+  * <lang>/README.md                         -> nothing
   * any other <lang>/** file                 -> every package of that language (shared resources)
   * anything else (root files, scripts/**)   -> nothing
 
@@ -59,7 +60,7 @@ def select(files: list[str], packages: dict[str, list[str]]) -> tuple[dict[str, 
             if owners:
                 # Specific package; the innermost one when packages nest
                 selected[top].add(max(owners, key=len))
-            else:
+            elif rest != "README.md":
                 # All packages of a language
                 selected[top].update(packages[top])
         # Other root-level files (README.md, AGENTS.md, ...) select nothing.

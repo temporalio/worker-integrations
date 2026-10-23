@@ -71,12 +71,69 @@ through that module's `IntegrationMeta`, which validates the schema; never index
 - Each package's `README.md` states the range of base SDK versions it supports. Package versions
   do not imply compatibility with the same-numbered SDK version.
 
+## Python conventions
+
+- **Names:** every package's root API (`root-api` in `integration.toml`) is a module under
+  `temporalio.worker_integrations`, and its other names derive from it. The folder is the rest of
+  the root API with `.` replaced by `_`, and the published name is the whole root API with `.`
+  and `_` replaced by `-`. For example, `temporalio.worker_integrations.aws.lambda_worker` lives in
+  `python/aws_lambda_worker/` and is published as
+  `temporalio-worker-integrations-aws-lambda-worker`.
+- **Layout:** the package folder contains `pyproject.toml`, `uv.lock`, `integration.toml`,
+  `Makefile`, `README.md`, `LICENSE`, `tests/`, and the root API under `src/` as a directory path
+  (e.g. `src/temporalio/worker_integrations/aws/lambda_worker/`).
+- **Namespace packages:** only the root API package has an `__init__.py` (and `py.typed`). Never
+  add `__init__.py` to the folders above it under `src/`: the SDK wheel owns `temporalio`, and the
+  levels below it are shared by every package in this repository.
+- **Non-editable installs:** an editable install can't extend the SDK-owned `temporalio`
+  package from `src/`, so `python/_shared/python.mk` exports `UV_NO_EDITABLE=1`. Use the `make`
+  targets (`make help`) rather than plain `uv sync`/`uv run`. The provenance guard in
+  `tests/conftest.py` fails the test run if the installed package isn't a clean, non-editable
+  install.
+- **Versions:** `[project] version` stays `0.0.0`; release tags supply the published version. The
+  first `[ci] runtime-versions` entry must equal the `requires-python` floor.
+- **Dependencies:** `exclude-newer = "2 weeks"` (a supply-chain cooldown) with
+  `exclude-newer-package = { temporalio = false }`, so a new SDK release can be adopted the day
+  it ships. Declare exactly what the package imports at module level; optional integrations go in
+  an extra.
+- **Tooling:** ruff, pyright, basedpyright, mypy, pydocstyle (google) and pytest with xdist, all
+  run through `make lint` and `make test`. `python/_shared/` holds the make targets and shared
+  Pyright/Ruff config; it must not contain Python code. Mypy and pydocstyle settings stay in each
+  `pyproject.toml`, because those tools can't extend a shared config.
+- **Standard test support:** `tests/helpers/package_meta.py`, `tests/helpers/provenance.py` and
+  `tests/test_installed_matches_source.py` must stay byte-identical to their
+  `python/_template/` versions (enforced by the conventions check). Package-specific fixtures go
+  in the package's own `tests/conftest.py`.
+
+### Adding a Python package
+
+```bash
+uv run --project scripts --locked python scripts/new_package.py \
+    --python temporalio.worker_integrations.aws.lambda_worker \
+    --description "Temporal worker integration for AWS Lambda" \
+    --maturity public-preview
+```
+
+`scripts/new_package.py` is shared by every language that has a template. Each language option
+takes the name that identifies a package in that language, since naming styles differ by
+language; for Python, that's the full root API. This one creates `python/aws_lambda_worker/` from
+`python/_template/`, deriving the folder and published name from the root API (see **Names**
+above) and the maturity classifier from `--maturity`, and copies the root `LICENSE`. It then
+prints the remaining steps: add dependencies, set the real `temporalio` floor, run `make sync`
+(which creates `uv.lock`; commit it), `make lint` and `make test`. Check the result with
+`uv run --project scripts --locked python scripts/ci/check_conventions.py`.
+
+Template files end in `.tmpl` so that tools ignore the template itself; the script drops the
+suffix. If you change the template, keep `python/_template/` and
+`scripts/lib/languages/python.py` (naming, conventions checks and scaffolding) in sync.
+
 ## CI
 
 - [`.github/workflows/ci.yml`](.github/workflows/ci.yml) is the single CI entry point.
   `scripts/ci/detect_changes.py` selects the packages an event touches: a package's own files
-  select that package (the innermost one, for nested Go modules); other files under a language
-  root select every package of that language; `.github/**`, `scripts/ci/**`, `scripts/lib/**` and
+  select that package (the innermost one, for nested Go modules); the language's own
+  `<language>/README.md` selects nothing; other files under a language root select every package
+  of that language; `.github/**`, `scripts/ci/**`, `scripts/lib/**` and
   `LICENSE` select everything.
 - Packages are identified by their folder path relative to the language root, which can contain
   `/` for Go. Where `/` isn't allowed (e.g. artifact names), use `Package.slug` from
@@ -89,3 +146,7 @@ through that module's `IntegrationMeta`, which validates the schema; never index
   `scripts/ci/`, shared code in the `scripts/lib/` package (stdlib only, since
   `detect_changes.py` runs before uv is installed). Entry scripts put `scripts/` on `sys.path`
   and import `lib.*`. Run its tests with `uv run --project scripts --locked pytest scripts/tests -q`.
+- Each language's tooling rules (naming, conventions checks, scaffolding) live in one module,
+  `scripts/lib/languages/<language>.py`, as a subclass of `Language` (`_base.py`) registered in
+  `TOOLED_LANGUAGES`. Adding tooling for a language means adding that module, a
+  `<language>/_template/` if needed, and its tests.

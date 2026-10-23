@@ -8,6 +8,11 @@ To make a contribution, just open a pull request with your package additions or 
 Once merged, it will be distributed in a new package version the next time the Temporal team
 creates a release for that package.
 
+## Set up
+
+- For language-specific instructions on setup, adding new packages, and working on existing
+  packages, see the README in the subdirectory for the relevant language.
+
 ## Pull requests
 
 - The Temporal Compute team (`@temporalio/compute`) are the codeowners for this repository.

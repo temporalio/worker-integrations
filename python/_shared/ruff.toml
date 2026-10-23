@@ -1,0 +1,5 @@
+target-version = "py310"
+
+[lint.isort]
+# The SDK owns the top-level temporalio package; packages here own only their integration subpackage.
+known-first-party = ["temporalio", "tests"]
