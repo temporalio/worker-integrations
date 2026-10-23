@@ -4,6 +4,8 @@
 #     DIST := <published name>
 #     include ../_shared/python.mk
 #
+# CI runs these same targets (.github/workflows/_python-package.yml), so there is one definition
+# of "lint" and "test".
 # See AGENTS.md ("Python conventions") for why installs are non-editable and which tools run.
 
 ifndef DIST

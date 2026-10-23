@@ -138,6 +138,10 @@ suffix. If you change the template, keep `python/_template/` and
 - Packages are identified by their folder path relative to the language root, which can contain
   `/` for Go. Where `/` isn't allowed (e.g. artifact names), use `Package.slug` from
   `scripts/lib/common.py`.
+- Each language has one reusable workflow (e.g. `_python-package.yml`) that `ci.yml` calls once
+  per selected package. It runs the package's `make` targets across a matrix built from
+  `integration.toml`'s runtime versions: the minimum and maximum on Ubuntu, and the maximum on
+  macOS and Windows. Never add a workflow, job or secret for one package.
 - `scripts/ci/check_conventions.py` checks repository invariants on every run.
 - `ci-status` is the only required check. Every other job in `ci.yml` must be listed in its
   `needs` (enforced by `scripts/tests/test_workflows.py`).
