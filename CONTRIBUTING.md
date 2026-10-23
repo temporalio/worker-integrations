@@ -9,6 +9,8 @@ workflow.
   `temporalio/.github`.
 - Every path is owned by `@temporalio/compute` (see [`.github/CODEOWNERS`](.github/CODEOWNERS));
   PRs need one code-owner approval.
+- CI runs only the packages whose files changed. `ci-status` is the required check that
+  summarizes the run.
 - Changes that need new or changed base SDK APIs land in the SDK repository first. A PR here can
   only depend on a released SDK version.
 
