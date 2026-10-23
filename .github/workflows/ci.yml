@@ -1,9 +1,10 @@
 # Repository CI entry point. One workflow for every language; per-language jobs call a
-# reusable workflow once per changed package (never a per-package copy).
+# reusable workflow once per changed package.
 #
-#   changes    -> which packages the event touches (scripts/ci/detect_changes.py)
-#   tooling    -> tests for the repository tooling under scripts/ (always)
-#   ci-status  -> the ONLY required status check; skipped jobs count as success
+#   changes      -> detect which packages the event (e.g., a PR) touches (scripts/ci/detect_changes.py)
+#   tooling      -> tests for the repository tooling under scripts/ (always)
+#   conventions  -> enforce repository conventions (scripts/ci/check_conventions.py; always)
+#   ci-status    -> the ONLY required status check; skipped jobs count as success
 name: CI
 
 on:
@@ -62,9 +63,26 @@ jobs:
       - name: Tooling unit tests
         run: uv run --project scripts --locked pytest scripts/tests -q
 
+  conventions:
+    name: Enforce repository conventions
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version-file: scripts/pyproject.toml
+          enable-cache: true
+          cache-dependency-glob: scripts/uv.lock
+      - name: Check repository conventions
+        run: uv run --project scripts --locked python scripts/ci/check_conventions.py
+
   ci-status:
     name: ci-status
-    needs: [changes, tooling]
+    needs: [changes, tooling, conventions]
     if: always()
     runs-on: ubuntu-latest
     permissions: {}
