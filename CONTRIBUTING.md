@@ -1,18 +1,22 @@
 # Contributing
 
-Read [`AGENTS.md`](AGENTS.md) first; it is the normative guide and this page only summarizes the
-workflow.
+This contains concrete information about contributing. See [`README.md`](README.md) for a high-level
+overview of the repository. Also see [`AGENTS.md`](AGENTS.md) for thorough details for coding
+agents (and humans).
+
+To make a contribution, just open a pull request with your package additions or modifications.
+Once merged, it will be distributed in a new package version the next time the Temporal team
+creates a release for that package.
 
 ## Pull requests
 
-- PRs are squash-merged. Issue and PR templates are the organization defaults from
-  `temporalio/.github`.
-- Every path is owned by `@temporalio/compute` (see [`.github/CODEOWNERS`](.github/CODEOWNERS));
+- The Temporal Compute team (`@temporalio/compute`) are the codeowners for this repository.
   PRs need one code-owner approval.
-- CI runs only the packages whose files changed. `ci-status` is the required check that
-  summarizes the run.
-- Changes that need new or changed base SDK APIs land in the SDK repository first. A PR here can
-  only depend on a released SDK version.
+- CI runs only for the packages whose files changed. `ci-status` is the required check; it will
+  fail if any individual CI check fails.
+- If you are making a change in this repository that depends on base SDK changes, the changes in
+  the SDK repositories must be accepted and released first. A PR here can only depend on a released
+  SDK version.
 
 ## Contributor License Agreement
 

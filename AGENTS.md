@@ -2,8 +2,8 @@
 
 # Temporal SDK worker integrations
 
-Normative guide for humans and coding agents working in this repository. Other documents
-(`README.md`, `CONTRIBUTING.md`) are short and link here.
+Thorough, normative guide for humans and coding agents working in this repository.
+Also see the human-friendly [README.md](README.md) for a high-level overview.
 
 ## Do not
 
