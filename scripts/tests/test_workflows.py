@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from _common import repo_root
+from lib.common import repo_root
 
 REPO = repo_root()
 WORKFLOWS = sorted((REPO / ".github" / "workflows").glob("*.yml"))

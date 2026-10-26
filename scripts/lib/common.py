@@ -1,6 +1,7 @@
-"""Shared helpers for the CI scripts (git, package discovery, GITHUB_OUTPUT).
+"""Shared helpers for the repository tooling (git, package discovery, TOML, GITHUB_OUTPUT).
 
-Stdlib only. Imported by the sibling scripts via their own directory on sys.path.
+Stdlib only: `ci/detect_changes.py` imports it under the runner's system python3, before uv is
+installed. Entry scripts put `scripts/` on sys.path and import it as `lib.common`.
 """
 
 from __future__ import annotations
@@ -9,6 +10,7 @@ import fnmatch
 import json
 import os
 import subprocess
+import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -44,11 +46,14 @@ IGNORED_NAMES = frozenset({"testdata"})
 @dataclass(frozen=True)
 class Package:
     language: str
-    name: str  # folder path relative to the language root, e.g. "aws/lambda/otel"
+    name: str
+    """Folder path relative to the language root, e.g. "aws/lambda/otel"."""
     path: Path
+    """Filesystem path to the package folder: the repository root joined with `rel`."""
 
     @property
     def rel(self) -> str:
+        """Folder path relative to the repository root, e.g. "go/aws/lambda/otel"."""
         return f"{self.language}/{self.name}"
 
     @property
@@ -103,6 +108,11 @@ def discover_packages(root: Path) -> dict[str, list[Package]]:
         if len(set(slugs)) != len(slugs):
             raise ValueError(f"{language}: package folder names collide once slashes are replaced: {slugs}")
     return found
+
+
+def load_toml(path: Path) -> dict[str, Any]:
+    with path.open("rb") as fh:
+        return tomllib.load(fh)
 
 
 def write_github_output(path: str | os.PathLike[str] | None, values: dict[str, Any]) -> None:

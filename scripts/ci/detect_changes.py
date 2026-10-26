@@ -5,11 +5,11 @@ Stdlib only (runs with the runner's system python3 before uv is installed).
 
 Rules:
   * push, schedule, workflow_dispatch, FORCE_ALL, unknown events, or an
-    unusable diff base                      -> every package of every language
-  * .github/**, scripts/ci/** or LICENSE    -> every package of every language
-  * <lang>/<package>/**                     -> that package (the innermost one, if packages nest)
-  * any other <lang>/** file                -> every package of that language (shared resources)
-  * anything else (root files, scripts/**)  -> nothing
+    unusable diff base                       -> every package of every language
+  * .github/**, scripts/{ci,lib}/**, LICENSE -> every package of every language
+  * <lang>/<package>/**                      -> that package (the innermost one, if packages nest)
+  * any other <lang>/** file                 -> every package of that language (shared resources)
+  * anything else (root files, scripts/**)   -> nothing
 
 Outputs, written as key=value lines to GITHUB_OUTPUT (for later jobs) and to stdout:
   * <lang>  one key per language, e.g. go=["aws/lambda","aws/lambda/otel"]: a sorted JSON array
@@ -31,8 +31,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _common import LANGUAGES, compact_json, discover_packages, git, repo_root, write_github_output  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from lib.common import LANGUAGES, compact_json, discover_packages, git, repo_root, write_github_output  # noqa: E402
 
 
 def changed_files(root: Path, base: str, head: str, three_dot: bool) -> list[str]:
@@ -49,7 +49,7 @@ def select(files: list[str], packages: dict[str, list[str]]) -> tuple[dict[str, 
     for f in files:
         parts = f.split("/")
         top = parts[0]
-        if top == ".github" or f == "LICENSE" or parts[:2] == ["scripts", "ci"]:
+        if top == ".github" or f == "LICENSE" or parts[:2] in (["scripts", "ci"], ["scripts", "lib"]):
             # Workflow/tooling changes affect every package; so does the root
             # LICENSE, which every package copies.
             return selected, True

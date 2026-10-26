@@ -24,4 +24,4 @@ exclude-newer = "2 weeks"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["ci"]
+pythonpath = ["."]

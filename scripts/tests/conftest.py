@@ -6,7 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from _common import git
+from lib.common import git
+from ci import check_conventions
 
 # Language -> the manifest file a minimal fake package of that language needs.
 FAKE_MANIFESTS = {
@@ -35,6 +36,16 @@ def commit_all(repo: Path, message: str) -> str:
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", message)
     return git(repo, "rev-parse", "HEAD").strip()
+
+
+def run_checker(repo: Path) -> list[str]:
+    return check_conventions.Checker(repo).run()
+
+
+def replace_in_file(path: Path, old: str, new: str) -> None:
+    text = path.read_text()
+    assert old in text, f"{old!r} not in {path}"
+    path.write_text(text.replace(old, new))
 
 
 def make_package(root: Path, language: str, name: str) -> Path:

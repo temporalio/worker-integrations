@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-import detect_changes
-from _common import LANGUAGES, discover_packages, git
+from ci import detect_changes
+from lib.common import LANGUAGES, discover_packages, git
 from conftest import FAKE_MANIFESTS, commit_all, make_package
 
 
@@ -106,7 +106,7 @@ def test_shared_language_file_selects_all_packages_of_that_language(repo: Path) 
     assert r["go"] == []
 
 
-@pytest.mark.parametrize("path", [".github/workflows/ci.yml", "scripts/ci/x.py", "LICENSE"])
+@pytest.mark.parametrize("path", [".github/workflows/ci.yml", "scripts/ci/x.py", "scripts/lib/x.py", "LICENSE"])
 def test_workflows_ci_scripts_and_license_select_everything(repo: Path, path: str) -> None:
     base = _setup(repo)
     r = _run(repo, base, path)

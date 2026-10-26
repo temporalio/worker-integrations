@@ -52,6 +52,13 @@ published name, maturity, and the language runtime versions it supports. Reposit
 such as CI and release automation, reads package metadata from this file instead of from each
 language's native manifest, so that adding a package doesn't require tooling changes.
 
+`integration.toml` holds metadata only: no owners (ownership is in
+[`.github/CODEOWNERS`](.github/CODEOWNERS)) and no secrets. The package's language and folder path
+come from its location, so the file doesn't repeat them. Its schema is documented in
+[`scripts/lib/integration_toml.py`](scripts/lib/integration_toml.py). Repository tooling reads it
+through that module's `IntegrationMeta`, which validates the schema; never index the raw TOML.
+`scripts/ci/check_conventions.py` also checks that it agrees with the native manifest.
+
 ## Versions and tags
 
 - A new published name starts at `0.0.1` (Pre-release), `0.1.0` (Public Preview) or `1.0.0`
@@ -69,13 +76,16 @@ language's native manifest, so that adding a package doesn't require tooling cha
 - [`.github/workflows/ci.yml`](.github/workflows/ci.yml) is the single CI entry point.
   `scripts/ci/detect_changes.py` selects the packages an event touches: a package's own files
   select that package (the innermost one, for nested Go modules); other files under a language
-  root select every package of that language; `.github/**`, `scripts/ci/**` and `LICENSE` select
-  everything.
+  root select every package of that language; `.github/**`, `scripts/ci/**`, `scripts/lib/**` and
+  `LICENSE` select everything.
 - Packages are identified by their folder path relative to the language root, which can contain
   `/` for Go. Where `/` isn't allowed (e.g. artifact names), use `Package.slug` from
-  `scripts/ci/_common.py`.
+  `scripts/lib/common.py`.
+- `scripts/ci/check_conventions.py` checks repository invariants on every run.
 - `ci-status` is the only required check. Every other job in `ci.yml` must be listed in its
   `needs` (enforced by `scripts/tests/test_workflows.py`).
 - Pin every third-party action to a full commit SHA with a `# vX.Y.Z` comment.
-- Repository tooling lives in `scripts/`, a standalone uv project. Run its tests with
-  `uv run --project scripts --locked pytest scripts/tests -q`.
+- Repository tooling lives in `scripts/`, a standalone uv project: CI entry points in
+  `scripts/ci/`, shared code in the `scripts/lib/` package (stdlib only, since
+  `detect_changes.py` runs before uv is installed). Entry scripts put `scripts/` on `sys.path`
+  and import `lib.*`. Run its tests with `uv run --project scripts --locked pytest scripts/tests -q`.
