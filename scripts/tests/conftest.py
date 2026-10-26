@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 import pytest
 
-from lib.common import git
+from lib.common import git, repo_root
 from ci import check_conventions
+from lib.languages import TOOLED_LANGUAGES
+from new_package import scaffold
+
+REPO = repo_root()
 
 # Language -> the manifest file a minimal fake package of that language needs.
 FAKE_MANIFESTS = {
@@ -53,6 +58,30 @@ def make_package(root: Path, language: str, name: str) -> Path:
     d = root / language / name
     d.mkdir(parents=True, exist_ok=True)
     (d / FAKE_MANIFESTS[language]).write_text("")
+    return d
+
+
+def copy_python_support(root: Path) -> None:
+    """Copy this repository's python/_shared, python/_template, LICENSE and scripts/pyproject.toml into `root`."""
+    for rel in ("python/_shared", "python/_template"):
+        if not (root / rel).exists():
+            shutil.copytree(REPO / rel, root / rel)
+    (root / "scripts").mkdir(exist_ok=True)
+    shutil.copy(REPO / "scripts" / "pyproject.toml", root / "scripts" / "pyproject.toml")
+    shutil.copy(REPO / "LICENSE", root / "LICENSE")
+
+
+def make_python_package(
+    root: Path, root_api: str = "temporalio.worker_integrations.aws.lambda_worker", maturity: str = "public-preview"
+) -> Path:
+    """Scaffold a Python package in `root` the way a contributor would, plus a stand-in uv.lock.
+
+    The result passes the conventions check exactly as a real package would.
+    """
+    copy_python_support(root)
+    scaffold(root, {"python": root_api}, f"Fake {root_api} integration", maturity)
+    d = root / "python" / TOOLED_LANGUAGES["python"].package_folder(root_api)
+    (d / "uv.lock").write_text("version = 1\n")
     return d
 
 

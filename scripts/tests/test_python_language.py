@@ -1,0 +1,77 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from conftest import make_python_package, replace_in_file, run_checker
+
+
+@pytest.mark.parametrize("maturity", ["pre-release", "public-preview", "generally-available"])
+def test_python_package_rendered_from_template_passes(repo: Path, maturity: str) -> None:
+    make_python_package(repo, maturity=maturity)
+    assert run_checker(repo) == []
+
+
+def test_python_package_without_vendor_level_passes(repo: Path) -> None:
+    make_python_package(repo, "temporalio.worker_integrations.otlp")
+    assert run_checker(repo) == []
+
+
+@pytest.mark.parametrize("level", ["temporalio", "temporalio/worker_integrations", "temporalio/worker_integrations/aws"])
+def test_python_namespace_levels_must_not_have_init(repo: Path, level: str) -> None:
+    d = make_python_package(repo)
+    (d / "src" / level / "__init__.py").write_text("")
+    assert any(f"src/{level}/__init__.py must not exist" in v for v in run_checker(repo))
+
+
+@pytest.mark.parametrize("old,new,message", [
+    ("temporalio.worker_integrations.aws.lambda_worker", "temporalio.aws_lambda_worker",
+     "root-api must be a snake_case module under temporalio.worker_integrations"),
+    ("temporalio.worker_integrations.aws.lambda_worker", "temporalio.worker_integrations.aws.lambda",
+     "the folder for root-api 'temporalio.worker_integrations.aws.lambda' must be python/aws_lambda"),
+    ('"temporalio-worker-integrations-aws-lambda-worker"', '"temporalio-aws-lambda-worker"',
+     "published-name must be 'temporalio-worker-integrations-aws-lambda-worker'"),
+])
+def test_python_names_must_derive_from_root_api(repo: Path, old: str, new: str, message: str) -> None:
+    d = make_python_package(repo)
+    replace_in_file(d / "integration.toml", old, new)
+    assert any(message in v for v in run_checker(repo))
+
+
+def test_pyproject_must_agree_with_integration_toml(repo: Path) -> None:
+    d = make_python_package(repo, maturity="public-preview")
+    replace_in_file(d / "pyproject.toml", "Development Status :: 4 - Beta", "Development Status :: 3 - Alpha")
+    replace_in_file(d / "pyproject.toml", 'requires-python = ">=3.10"', 'requires-python = ">=3.11"')
+    replace_in_file(d / "pyproject.toml", 'version = "0.0.0"', 'version = "0.1.0"')
+    violations = run_checker(repo)
+    assert any("classifiers must contain exactly" in v for v in violations)
+    assert any("must equal the requires-python floor" in v for v in violations)
+    assert any("development placeholder" in v for v in violations)
+
+
+def test_python_path_sources_are_rejected(repo: Path) -> None:
+    d = make_python_package(repo)
+    with (d / "pyproject.toml").open("a") as fh:
+        fh.write('\n[tool.uv.sources]\ntemporalio = { path = "../../../sdk-python" }\n')
+    assert any("path/workspace source" in v for v in run_checker(repo))
+
+
+def test_python_standard_test_support_must_match_template(repo: Path) -> None:
+    d = make_python_package(repo)
+    with (d / "tests" / "helpers" / "provenance.py").open("a") as fh:
+        fh.write("# local edit\n")
+    assert any("tests/helpers/provenance.py: differs from python/_template" in v for v in run_checker(repo))
+
+
+def test_python_readme_relative_links_are_rejected(repo: Path) -> None:
+    d = make_python_package(repo)
+    with (d / "README.md").open("a") as fh:
+        fh.write("See [the guide](../../AGENTS.md).\n")
+    assert any("relative link" in v for v in run_checker(repo))
+
+
+def test_python_source_in_shared_is_rejected(repo: Path) -> None:
+    make_python_package(repo)
+    (repo / "python" / "_shared" / "helpers.py").write_text("x = 1\n")
+    assert any("must be duplicated into each package" in v for v in run_checker(repo))
