@@ -142,15 +142,20 @@ suffix. If you change the template, keep `python/_template/` and
   per selected package. It runs the package's `make` targets across a matrix built from
   `integration.toml`'s runtime versions: the minimum and maximum on Ubuntu, and the maximum on
   macOS and Windows. Never add a workflow, job or secret for one package.
+- On the Ubuntu cell at the maximum version, the Python workflow also runs `make build` and checks
+  the wheel with `scripts/ci/python/check_wheel.py`.
 - `scripts/ci/check_conventions.py` checks repository invariants on every run.
 - `ci-status` is the only required check. Every other job in `ci.yml` must be listed in its
   `needs` (enforced by `scripts/tests/test_workflows.py`).
 - Pin every third-party action to a full commit SHA with a `# vX.Y.Z` comment.
 - Repository tooling lives in `scripts/`, a standalone uv project: CI entry points in
-  `scripts/ci/`, shared code in the `scripts/lib/` package (stdlib only, since
-  `detect_changes.py` runs before uv is installed). Entry scripts put `scripts/` on `sys.path`
-  and import `lib.*`. Run its tests with `uv run --project scripts --locked pytest scripts/tests -q`.
+  `scripts/ci/` (those that only one language's workflow runs in `scripts/ci/<language>/`),
+  shared code in the `scripts/lib/` package (stdlib only, since `detect_changes.py` runs before
+  uv is installed). Entry scripts put `scripts/` on `sys.path` and import `lib.*`. Run its tests
+  with `uv run --project scripts --locked pytest scripts/tests -q`.
 - Each language's tooling rules (naming, conventions checks, scaffolding) live in one module,
   `scripts/lib/languages/<language>.py`, as a subclass of `Language` (`_base.py`) registered in
   `TOOLED_LANGUAGES`. Adding tooling for a language means adding that module, a
-  `<language>/_template/` if needed, and its tests.
+  `<language>/_template/` if needed, any scripts only its workflow runs in
+  `scripts/ci/<language>/`, and their tests. Name language-specific test files
+  `test_<language>_*.py` (e.g. `test_python_language.py`).

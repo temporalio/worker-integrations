@@ -74,3 +74,6 @@ jobs:
       - name: Build distributions
         if: matrix.build
         run: cd "$PACKAGE_DIR" && make build
+      - name: Verify distributions
+        if: matrix.build
+        run: uv run --project scripts --locked python scripts/ci/python/check_wheel.py --package-dir "$PACKAGE_DIR"
