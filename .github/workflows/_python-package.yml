@@ -1,0 +1,76 @@
+# Reusable workflow for ONE Python package, called by ci.yml once per changed package.
+# Package-specific behavior is data (python/<package>/integration.toml, pyproject.toml, Makefile);
+# never edit this file for package-specific things.
+name: Python package
+
+on:
+  workflow_call:
+    inputs:
+      package:
+        description: Package folder name under python/ (e.g. aws_lambda_worker)
+        type: string
+        required: true
+
+permissions: {}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  matrix:
+    name: matrix
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version-file: scripts/pyproject.toml
+      - id: matrix
+        env:
+          PACKAGE: ${{ inputs.package }}
+        run: uv run --project scripts --locked python scripts/ci/matrix.py --package-dir "python/$PACKAGE" --github-output "$GITHUB_OUTPUT"
+
+  test:
+    name: ${{ inputs.package }} (${{ matrix.os }}, py${{ matrix.runtime }})
+    needs: matrix
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.matrix.outputs.matrix) }}
+    env:
+      PACKAGE_DIR: python/${{ inputs.package }} # run steps `cd` here; never interpolate inputs into run blocks
+      UV_NO_EDITABLE: "1" # an editable install can't extend the SDK-owned temporalio package from src/
+      UV_LINK_MODE: copy
+      COLUMNS: "120"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          python-version: ${{ matrix.runtime }}
+          version-file: python/${{ inputs.package }}/pyproject.toml
+          enable-cache: true
+          cache-dependency-glob: python/${{ inputs.package }}/uv.lock
+      - name: Install GNU make (Windows)
+        if: runner.os == 'Windows'
+        run: choco install make -y --no-progress
+      - name: Sync environment
+        run: cd "$PACKAGE_DIR" && make sync
+      - name: Lint and type-check
+        run: cd "$PACKAGE_DIR" && make lint
+      - name: Test
+        run: cd "$PACKAGE_DIR" && make test
+      - name: Build distributions
+        if: matrix.build
+        run: cd "$PACKAGE_DIR" && make build

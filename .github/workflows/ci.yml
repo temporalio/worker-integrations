@@ -4,6 +4,7 @@
 #   changes      -> detect which packages the event (e.g., a PR) touches (scripts/ci/detect_changes.py)
 #   tooling      -> tests for the repository tooling under scripts/ (always)
 #   conventions  -> enforce repository conventions (scripts/ci/check_conventions.py; always)
+#   python       -> _python-package.yml once per changed Python package
 #   ci-status    -> the ONLY required status check; skipped jobs count as success
 name: CI
 
@@ -30,6 +31,7 @@ jobs:
     permissions:
       contents: read
     outputs:
+      python: ${{ steps.detect.outputs.python }}
       any: ${{ steps.detect.outputs.any }}
       mode: ${{ steps.detect.outputs.mode }}
     steps:
@@ -80,9 +82,23 @@ jobs:
       - name: Check repository conventions
         run: uv run --project scripts --locked python scripts/ci/check_conventions.py
 
+  python:
+    name: Python
+    needs: changes
+    if: needs.changes.result == 'success' && needs.changes.outputs.python != '[]'
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        package: ${{ fromJson(needs.changes.outputs.python) }}
+    uses: ./.github/workflows/_python-package.yml
+    with:
+      package: ${{ matrix.package }}
+
   ci-status:
     name: ci-status
-    needs: [changes, tooling, conventions]
+    needs: [changes, tooling, conventions, python]
     if: always()
     runs-on: ubuntu-latest
     permissions: {}
