@@ -39,6 +39,33 @@ def test_python_names_must_derive_from_root_api(repo: Path, old: str, new: str, 
     assert any(message in v for v in run_checker(repo))
 
 
+@pytest.mark.parametrize("module", [
+    "temporalio.worker_integrations.aws.lambda_worker.testing",
+    "temporalio.worker_integrations.aws.lambda_worker._plugin",
+    "temporalio.worker_integrations.aws.lambda_worker.otel._setup",
+])
+def test_python_smoke_imports_submodule_passes(repo: Path, module: str) -> None:
+    d = make_python_package(repo)
+    with (d / "integration.toml").open("a") as fh:
+        fh.write(f'\n[smoke]\nimports = ["{module}"]\n')
+    assert run_checker(repo) == []
+
+
+@pytest.mark.parametrize("module", [
+    "temporalio.worker_integrations.aws.lambda_worker",
+    "temporalio.worker_integrations.aws.lambda_worker.",
+    "temporalio.worker_integrations.aws.lambda_worker_testing",
+    "temporalio.worker_integrations.aws.lambda_worker.Testing",
+    "temporalio.worker_integrations.aws.lambda_worker.1x",
+    "temporalio.contrib.aws.lambda_worker",
+])
+def test_python_smoke_imports_must_be_submodules(repo: Path, module: str) -> None:
+    d = make_python_package(repo)
+    with (d / "integration.toml").open("a") as fh:
+        fh.write(f'\n[smoke]\nimports = ["{module}"]\n')
+    assert any(f"[smoke] imports entry {module!r} must be a submodule" in v for v in run_checker(repo))
+
+
 def test_pyproject_must_agree_with_integration_toml(repo: Path) -> None:
     d = make_python_package(repo, maturity="public-preview")
     replace_in_file(d / "pyproject.toml", "Development Status :: 4 - Beta", "Development Status :: 3 - Alpha")

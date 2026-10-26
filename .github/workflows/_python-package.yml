@@ -77,3 +77,6 @@ jobs:
       - name: Verify distributions
         if: matrix.build
         run: uv run --project scripts --locked python scripts/ci/python/check_wheel.py --package-dir "$PACKAGE_DIR"
+      - name: Smoke-test distributions
+        if: matrix.build
+        run: uv run --project scripts --locked python scripts/ci/python/smoke.py --package-dir "$PACKAGE_DIR"

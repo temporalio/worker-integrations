@@ -44,6 +44,11 @@ def test_valid_package_passes(repo: Path) -> None:
     ('root-api = "go.temporal.io/workerintegrations/aws/lambda"', 'root-api = ""', "root-api must be a non-empty string"),
     ('runtime-versions = ["1.26", "1.27"]', "runtime-versions = []", "runtime-versions must be a non-empty list"),
     ("[package]", "[plugin]", "missing [package] table"),
+    ("[ci]", '[release]\nallow-final = true\n\n[ci]', "unknown table [release]"),
+    ('maturity = "public-preview"', 'maturity = "public-preview"\ndocs = "https://docs.temporal.io"',
+     "unknown key(s) in [package]: docs"),
+    ("[ci]", '[smoke]\nimport = ["x"]\n\n[ci]', "unknown key(s) in [smoke]: import"),
+    ("[ci]", '[smoke]\nimports = "x"\n\n[ci]', "[smoke] imports must be a list of non-empty strings"),
 ])
 def test_integration_toml_schema(repo: Path, old: str, new: str, message: str) -> None:
     d = _make_go_package(repo)
