@@ -7,3 +7,8 @@ maturity = "__MATURITY__"
 
 [ci]
 runtime-versions = ["3.10", "3.14"]
+
+# Submodules that importing the root API doesn't load (e.g. public entry points), and that must
+# import without extras:
+# [smoke]
+# imports = ["__MODULE__.testing"]   # e.g. a public testing helpers module

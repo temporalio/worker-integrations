@@ -9,6 +9,14 @@ Schema:
 
     [ci]
     runtime-versions = ["3.10", "3.14"]       # first = minimum, last = maximum supported runtime
+
+    [smoke]                                   # optional
+    # Entry points under root-api (e.g. Python modules, TypeScript subpath exports, Java classes)
+    # that the smoke test imports from a base install (without optional features such as Python
+    # extras), in addition to root-api itself.
+    imports = ["temporalio.worker_integrations.aws.lambda_worker.testing"]
+
+Unknown tables and keys are errors, so that a misspelled optional key can't be silently ignored.
 """
 
 from __future__ import annotations
@@ -21,6 +29,12 @@ from typing import Any
 from lib.common import load_toml
 
 MATURITIES = ("generally-available", "public-preview", "pre-release")
+# Table -> the keys it may contain.
+SCHEMA = {
+    "package": {"published-name", "root-api", "maturity"},
+    "ci": {"runtime-versions"},
+    "smoke": {"imports"},
+}
 
 
 class IntegrationTomlError(ValueError):
@@ -34,6 +48,8 @@ class IntegrationMeta:
     maturity: str
     runtime_versions: tuple[str, ...]
     """Supported language runtime versions: first = minimum, last = maximum."""
+    smoke_imports: tuple[str, ...] = ()
+    """Entry points under `root_api` that the smoke test imports from a base install."""
 
     @classmethod
     def from_file(cls, path: Path) -> IntegrationMeta:
@@ -43,6 +59,13 @@ class IntegrationMeta:
             raise IntegrationTomlError(f"cannot parse: {exc}") from exc
         package = _table(data, "package")
         ci = _table(data, "ci")
+        smoke = _table(data, "smoke") if "smoke" in data else {}
+        for name, table in data.items():
+            if name not in SCHEMA:
+                raise IntegrationTomlError(f"unknown table [{name}]")
+            unknown = sorted(set(table) - SCHEMA[name]) if isinstance(table, dict) else []
+            if unknown:
+                raise IntegrationTomlError(f"unknown key(s) in [{name}]: {', '.join(unknown)}")
 
         maturity = _string(package, "maturity")
         if maturity not in MATURITIES:
@@ -50,12 +73,16 @@ class IntegrationMeta:
         versions = ci.get("runtime-versions")
         if not isinstance(versions, list) or not versions or not all(isinstance(v, str) for v in versions):
             raise IntegrationTomlError("[ci] runtime-versions must be a non-empty list of strings")
+        imports = smoke.get("imports", [])
+        if not isinstance(imports, list) or not all(isinstance(i, str) and i for i in imports):
+            raise IntegrationTomlError("[smoke] imports must be a list of non-empty strings")
 
         return cls(
             published_name=_string(package, "published-name"),
             root_api=_string(package, "root-api"),
             maturity=maturity,
             runtime_versions=tuple(versions),
+            smoke_imports=tuple(imports),
         )
 
 

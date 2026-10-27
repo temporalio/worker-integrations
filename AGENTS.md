@@ -104,6 +104,10 @@ through that module's `IntegrationMeta`, which validates the schema; never index
   `tests/test_installed_matches_source.py` must stay byte-identical to their
   `python/_template/` versions (enforced by the conventions check). Package-specific fixtures go
   in the package's own `tests/conftest.py`.
+- **Smoke test:** CI installs the built wheel and sdist into clean environments, once without
+  extras and once with all of them, imports the package's modules and runs the provenance guard.
+  List submodules that the root API doesn't import (e.g. public entry points), and that must work
+  without extras, in `integration.toml`'s `[smoke] imports`.
 
 ### Adding a Python package
 
@@ -142,8 +146,9 @@ suffix. If you change the template, keep `python/_template/` and
   per selected package. It runs the package's `make` targets across a matrix built from
   `integration.toml`'s runtime versions: the minimum and maximum on Ubuntu, and the maximum on
   macOS and Windows. Never add a workflow, job or secret for one package.
-- On the Ubuntu cell at the maximum version, the Python workflow also runs `make build` and checks
-  the wheel with `scripts/ci/python/check_wheel.py`.
+- On the Ubuntu cell at the maximum version, the Python workflow also runs `make build`, checks
+  the wheel with `scripts/ci/python/check_wheel.py`, and smoke-tests the wheel and sdist in
+  clean environments with `scripts/ci/python/smoke.py`.
 - `scripts/ci/check_conventions.py` checks repository invariants on every run.
 - `ci-status` is the only required check. Every other job in `ci.yml` must be listed in its
   `needs` (enforced by `scripts/tests/test_workflows.py`).

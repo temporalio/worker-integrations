@@ -5,6 +5,7 @@ Checks (see AGENTS.md, "Python conventions"):
   * required files (including the root-api package's __init__.py and py.typed) exist; root-api is
     under `temporalio.worker_integrations`, and the folder and published name derive from it
   * no __init__.py in the shared namespace levels above the root-api package
+  * every [smoke] imports entry in integration.toml is a submodule of root-api
   * the Makefile is exactly the two-line stub that includes python/_shared/python.mk
   * pyproject.toml agrees with integration.toml (name, maturity classifier, requires-python floor,
     module-name) and with repository policy (version placeholder, license, uv settings)
@@ -24,6 +25,8 @@ from lib.languages._base import CheckContext, Language
 
 PROJECT_NAMESPACE = "temporalio.worker_integrations"
 PYTHON_MODULE_RE = re.compile(r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$")
+# Like PYTHON_MODULE_RE, but segments may also be private (start with `_`).
+PYTHON_SUBMODULE_RE = re.compile(r"^[a-z_][a-z0-9_]*(\.[a-z_][a-z0-9_]*)*$")
 PYPI_MATURITY_CLASSIFIER = {
     "generally-available": "Development Status :: 5 - Production/Stable",
     "public-preview": "Development Status :: 4 - Beta",
@@ -120,6 +123,12 @@ class Python(Language):
             return
         if meta.published_name != published_name:
             ctx.fail(f"{rel}/integration.toml: published-name must be {published_name!r} (got {meta.published_name!r})")
+
+        # Smoke test imports must be submodules of the root API
+        for module in meta.smoke_imports:
+            submodule = module.removeprefix(f"{root_api}.")
+            if submodule == module or not PYTHON_SUBMODULE_RE.match(submodule):
+                ctx.fail(f"{rel}/integration.toml: [smoke] imports entry {module!r} must be a submodule of {root_api!r}")
 
         # The root API's directory must have __init__.py (and py.typed), but its parents must not
         # since they're shared by multiple different packages (so no individual package here can define it)
