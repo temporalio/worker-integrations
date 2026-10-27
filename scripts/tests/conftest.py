@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -85,6 +86,20 @@ def make_python_package(
     return d
 
 
+def build_python_package(d: Path) -> Path:
+    """Build the package's wheel and sdist into dist/, the way `make build` does, and return dist/."""
+    subprocess.run(["uv", "build", "--no-sources", "--out-dir", "dist"], cwd=d, check=True, capture_output=True)
+    return d / "dist"
+
+
 @pytest.fixture
 def repo(tmp_path: Path) -> Path:
     return init_repo(tmp_path / "repo")
+
+
+@pytest.fixture(scope="session")
+def built(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """A freshly scaffolded Python package, built with build_python_package. Copy it before changing it."""
+    d = make_python_package(init_repo(tmp_path_factory.mktemp("built") / "repo"))
+    build_python_package(d)
+    return d
