@@ -95,7 +95,13 @@ through that module's `IntegrationMeta`, which validates the schema; never index
 - **Dependencies:** `exclude-newer = "2 weeks"` (a supply-chain cooldown) with
   `exclude-newer-package = { temporalio = false }`, so a new SDK release can be adopted the day
   it ships. Declare exactly what the package imports at module level; optional integrations go in
-  an extra.
+  an extra. Keep lower bounds honest: CI also tests with the lowest versions they allow (see
+  **CI**).
+- **Dependency modes:** the `DEPS` make variable selects what `make sync` installs: `locked`
+  (default) is the committed `uv.lock`, `lowest` re-locks with uv's `lowest-direct` resolution, and
+  `latest` re-locks to the newest allowed versions. Pass the same `DEPS` to every later target
+  (e.g. `make sync test DEPS=lowest`), since a lock re-made with `lowest` is only accepted in that
+  mode. Never commit a re-made `uv.lock`; restore it with `git checkout uv.lock`.
 - **Tooling:** ruff, pyright, basedpyright, mypy, pydocstyle (google) and pytest with xdist, all
   run through `make lint` and `make test`. `python/_shared/` holds the make targets and shared
   Pyright/Ruff config; it must not contain Python code. Mypy and pydocstyle settings stay in each
@@ -146,9 +152,15 @@ suffix. If you change the template, keep `python/_template/` and
   per selected package. It runs the package's `make` targets across a matrix built from
   `integration.toml`'s runtime versions: the minimum and maximum on Ubuntu, and the maximum on
   macOS and Windows. Never add a workflow, job or secret for one package.
-- On the Ubuntu cell at the maximum version, the Python workflow also runs `make build`, checks
-  the wheel with `scripts/ci/python/check_wheel.py`, and smoke-tests the wheel and sdist in
-  clean environments with `scripts/ci/python/smoke.py`.
+- Every cell has a dependency mode (`scripts/ci/matrix.py`). PRs, merge queues and pushes test the
+  lockfile in every cell, plus the lowest allowed versions of direct dependencies (for languages
+  whose default resolution doesn't already pick them) on Ubuntu at the minimum version. The
+  nightly schedule, and a manual run with `latest-deps`, test every package with the newest
+  allowed versions in every cell instead.
+- On the Ubuntu cell at the maximum version (of the lockfile cells, and of the newest-versions
+  cells), the Python workflow also runs `make build`, checks the wheel with
+  `scripts/ci/python/check_wheel.py`, and smoke-tests the wheel and sdist in clean environments with
+  `scripts/ci/python/smoke.py`.
 - `scripts/ci/check_conventions.py` checks repository invariants on every run.
 - `ci-status` is the only required check. Every other job in `ci.yml` must be listed in its
   `needs` (enforced by `scripts/tests/test_workflows.py`).

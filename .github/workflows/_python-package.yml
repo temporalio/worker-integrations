@@ -10,6 +10,10 @@ on:
         description: Package folder name under python/ (e.g. aws_lambda_worker)
         type: string
         required: true
+      deps:
+        description: Space-separated dependency modes for the matrix (locked, lowest, latest; see scripts/ci/matrix.py)
+        type: string
+        required: true
 
 permissions: {}
 
@@ -35,10 +39,12 @@ jobs:
       - id: matrix
         env:
           PACKAGE: ${{ inputs.package }}
-        run: uv run --project scripts --locked python scripts/ci/matrix.py --package-dir "python/$PACKAGE" --github-output "$GITHUB_OUTPUT"
+          DEPS: ${{ inputs.deps }}
+        # $DEPS is deliberately unquoted so that each mode becomes one argument; matrix.py rejects unknown modes.
+        run: uv run --project scripts --locked python scripts/ci/matrix.py --package-dir "python/$PACKAGE" --deps $DEPS --github-output "$GITHUB_OUTPUT"
 
   test:
-    name: ${{ inputs.package }} (${{ matrix.os }}, py${{ matrix.runtime }})
+    name: ${{ inputs.package }} (${{ matrix.os }}, py${{ matrix.runtime }}, ${{ matrix.deps }})
     needs: matrix
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
@@ -51,6 +57,7 @@ jobs:
       PACKAGE_DIR: python/${{ inputs.package }} # run steps `cd` here; never interpolate inputs into run blocks
       UV_NO_EDITABLE: "1" # an editable install can't extend the SDK-owned temporalio package from src/
       UV_LINK_MODE: copy
+      DEPS: ${{ matrix.deps }} # read by every make target (python/_shared/python.mk)
       COLUMNS: "120"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
