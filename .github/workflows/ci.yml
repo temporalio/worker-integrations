@@ -6,6 +6,7 @@
 #   conventions  -> enforce repository conventions (scripts/ci/check_conventions.py; always)
 #   python       -> _python-package.yml once per changed Python package (locked and lowest
 #                   dependencies; newest allowed dependencies on the nightly schedule)
+#   nightly-report -> one issue per package failing on the nightly schedule (scripts/ci/nightly_report.py)
 #   ci-status   -> the ONLY required status check; skipped jobs count as success
 name: CI
 
@@ -107,9 +108,33 @@ jobs:
       # everything else: both locked and lowest deps
       deps: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.latest-deps)) && 'latest' || 'locked lowest' }}
 
+  nightly-report:
+    name: Nightly report
+    needs: [changes, python]
+    # !cancelled(): report even when package jobs failed, but not on a run someone cancelled
+    if: ${{ !cancelled() && github.event_name == 'schedule' && needs.changes.result == 'success' }}
+    # Queue reports (e.g. from a re-run of an old nightly) so that two can't open duplicate issues
+    concurrency:
+      group: nightly-report
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Open, update or close nightly issues
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+        run: python3 scripts/ci/nightly_report.py
+
   ci-status:
     name: ci-status
-    needs: [changes, tooling, conventions, python]
+    needs: [changes, tooling, conventions, python, nightly-report]
     if: always()
     runs-on: ubuntu-latest
     permissions: {}

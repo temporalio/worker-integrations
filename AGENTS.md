@@ -157,6 +157,10 @@ suffix. If you change the template, keep `python/_template/` and
   whose default resolution doesn't already pick them) on Ubuntu at the minimum version. The
   nightly schedule, and a manual run with `latest-deps`, test every package with the newest
   allowed versions in every cell instead.
+- After the nightly run, `scripts/ci/nightly_report.py` keeps one open issue labelled `nightly` per
+  failing package, and closes it once the package passes again. It finds packages by job name, so
+  each language's job in `ci.yml` has its language root as its ID and is listed in
+  `nightly_report.GITHUB_JOB_LANGUAGES` (enforced by `scripts/tests/test_nightly_report.py`).
 - On the Ubuntu cell at the maximum version (of the lockfile cells, and of the newest-versions
   cells), the Python workflow also runs `make build`, checks the wheel with
   `scripts/ci/python/check_wheel.py`, and smoke-tests the wheel and sdist in clean environments with

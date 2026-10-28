@@ -54,6 +54,12 @@ This repository contains extensive tooling for managing packages across all the 
 in a consistent manner. This includes scripts for running CI tasks and smoke tests, enforcing
 repository conventions, publishing releases, automatically setting up new packages, and more.
 
+Most of the tooling is run automatically on-event (on PRs, on push, on release publication, etc.)
+or on-demand (dev scripts, manually triggered CI workflows). There's also a scheduled nightly test,
+which verifies each package's compatibility with the newest versions allowed by its declared
+dependency ranges; failures are tracked in automatically managed issues, one per failing package,
+which close once the package passes again.
+
 The `scripts/` directory is itself a standalone (unpublished) Python project, and includes its own
 tests.
 
