@@ -16,6 +16,19 @@ endif
 # package cannot reliably extend it with another package root. Every uv command below runs non-editable.
 export UV_NO_EDITABLE := 1
 
+# Which dependency versions `sync` installs (CI sets it per matrix cell):
+#   locked  the committed uv.lock
+#   lowest  re-lock to the lowest versions allowed for direct dependencies
+#   latest  re-lock to the newest allowed versions
+# `lowest` and `latest` rewrite uv.lock; never commit the result. uv records the resolution mode in
+# uv.lock and rejects a lock made in another mode, so later targets must be given the same DEPS.
+DEPS ?= locked
+ifeq ($(DEPS),lowest)
+export UV_RESOLUTION := lowest-direct
+else ifneq ($(filter-out locked latest,$(DEPS)),)
+$(error DEPS must be locked, lowest, or latest (got '$(DEPS)'))
+endif
+
 PYTEST_ARGS ?=
 UV_RUN := uv run --locked
 PYTEST := $(UV_RUN) pytest -n auto --dist=worksteal
@@ -25,8 +38,14 @@ PYTEST := $(UV_RUN) pytest -n auto --dist=worksteal
 help: ## Show available targets
 	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-20s %s\n", $$1, $$2}'
 
-sync: ## Install locked dependencies and this package (non-editable); creates uv.lock on first run
+sync: ## Install dependencies (see DEPS) and this package (non-editable); creates uv.lock on first run
+ifeq ($(DEPS),locked)
 	@test -f uv.lock || uv lock
+else ifeq ($(DEPS),lowest)
+	uv lock
+else
+	uv lock --upgrade
+endif
 	uv sync --locked
 
 format: ## Fix import order and formatting

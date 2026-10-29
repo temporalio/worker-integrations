@@ -4,8 +4,9 @@
 #   changes      -> detect which packages the event (e.g., a PR) touches (scripts/ci/detect_changes.py)
 #   tooling      -> tests for the repository tooling under scripts/ (always)
 #   conventions  -> enforce repository conventions (scripts/ci/check_conventions.py; always)
-#   python       -> _python-package.yml once per changed Python package
-#   ci-status    -> the ONLY required status check; skipped jobs count as success
+#   python       -> _python-package.yml once per changed Python package (locked and lowest
+#                   dependencies; newest allowed dependencies on the nightly schedule)
+#   ci-status   -> the ONLY required status check; skipped jobs count as success
 name: CI
 
 on:
@@ -16,7 +17,14 @@ on:
   merge_group:
   push:
     branches: [main]
+  schedule:
+    - cron: "0 7 * * *" # nightly: every package, newest allowed dependencies
   workflow_dispatch:
+    inputs:
+      latest-deps:
+        description: Test with the newest allowed dependencies instead of the lockfiles, as the nightly run does
+        type: boolean
+        default: false
 
 permissions: {}
 
@@ -95,6 +103,9 @@ jobs:
     uses: ./.github/workflows/_python-package.yml
     with:
       package: ${{ matrix.package }}
+      # nightly or `latest-deps` dispatch: latest deps only
+      # everything else: both locked and lowest deps
+      deps: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.latest-deps)) && 'latest' || 'locked lowest' }}
 
   ci-status:
     name: ci-status
