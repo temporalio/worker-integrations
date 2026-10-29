@@ -1,10 +1,12 @@
 # Release dry run for ONE Python package, selected by its planned release tag
 # (python/<package>/v<version>, e.g. python/aws_lambda_worker/v0.1.0). Dispatch it on main
-# before creating a release. It never uploads or tags anything.
+# before creating a release. release-python.yml also calls it as the first step of a release.
+# It never publishes or tags anything.
 #
 #   check  -> check the tag and version (scripts/ci/check_release.py)
 #   test   -> _python-package.yml for the package with the tag's version injected: the lockfile
-#             matrix, then building and checking the distributions
+#             matrix, then building and checking the distributions, which it saves as the run's
+#             dist-<package> artifact
 name: Release dry run (Python)
 
 on:
@@ -14,6 +16,22 @@ on:
         description: Release tag to dry-run, e.g. python/aws_lambda_worker/v0.1.0
         type: string
         required: true
+  workflow_call:
+    inputs:
+      tag:
+        description: Release tag to dry-run, e.g. python/aws_lambda_worker/v0.1.0
+        type: string
+        required: true
+    outputs:
+      package:
+        description: Package folder name under python/
+        value: ${{ jobs.check.outputs.package }}
+      version:
+        description: Version to publish, e.g. 0.1.0 (the part of the tag after its "v")
+        value: ${{ jobs.check.outputs.version }}
+      prerelease:
+        description: Whether the GitHub release must be marked as a pre-release ("true" or "false")
+        value: ${{ jobs.check.outputs.prerelease }}
 
 permissions: {}
 
@@ -30,6 +48,7 @@ jobs:
     outputs:
       package: ${{ steps.check.outputs.package }}
       version: ${{ steps.check.outputs.version }}
+      prerelease: ${{ steps.check.outputs.prerelease }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

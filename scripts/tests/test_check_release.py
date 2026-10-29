@@ -69,13 +69,13 @@ def test_raised_maturity_allows_a_pre_release_of_its_first_version(maturity: str
     assert check_release.check_version_conventions(v(version), maturity, [v("0.0.5")]) == []
 
 
-@pytest.mark.parametrize("maturity,tag,prerelease", [
-    ("public-preview", TAG, "no"),
-    ("public-preview", "python/aws_lambda_worker/v0.1.0rc1", "yes"),
-    ("pre-release", "python/aws_lambda_worker/v0.0.1", "yes"),
+@pytest.mark.parametrize("maturity,tag,prerelease,answer", [
+    ("public-preview", TAG, "false", "no"),
+    ("public-preview", "python/aws_lambda_worker/v0.1.0rc1", "true", "yes"),
+    ("pre-release", "python/aws_lambda_worker/v0.0.1", "true", "yes"),
 ])
 def test_main_writes_outputs_and_summary(
-    repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, maturity: str, tag: str, prerelease: str
+    repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, maturity: str, tag: str, prerelease: str, answer: str
 ) -> None:
     make_python_package(repo, maturity=maturity)
     sha = commit_all(repo, "add package")
@@ -83,9 +83,9 @@ def test_main_writes_outputs_and_summary(
     output, summary = tmp_path / "output", tmp_path / "summary"
     assert run(repo, tag, "--github-output", str(output), "--github-step-summary", str(summary)) == 0
     version = tag.rpartition("/v")[2]
-    assert output.read_text() == f"package=aws_lambda_worker\nversion={version}\n"
+    assert output.read_text() == f"package=aws_lambda_worker\nversion={version}\nprerelease={prerelease}\n"
     assert f"Tested commit: `{sha}`" in summary.read_text()
-    assert f"Mark the GitHub release as a pre-release: {prerelease}" in summary.read_text()
+    assert f"Mark the GitHub release as a pre-release: {answer}" in summary.read_text()
 
 
 def test_main_rejects_another_languages_tag(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:

@@ -51,7 +51,39 @@ def test_ci_status_is_the_fan_in() -> None:
 def test_release_python_dry_run_tests_the_checked_package_and_version() -> None:
     # The test job builds what the check job validated, so its inputs must come from the check's outputs.
     jobs = yaml.safe_load((REPO / ".github/workflows/release-python-dry-run.yml").read_text())["jobs"]
-    assert set(jobs["check"]["outputs"]) == {"package", "version"}
+    assert set(jobs["check"]["outputs"]) == {"package", "version", "prerelease"}
     assert jobs["test"]["uses"] == "./.github/workflows/_python-package.yml"
     assert jobs["test"]["with"]["package"] == "${{ needs.check.outputs.package }}"
     assert jobs["test"]["with"]["version"] == "${{ needs.check.outputs.version }}"
+
+
+def test_release_python_only_runs_for_published_releases() -> None:
+    # No manual trigger: publishing a GitHub release is the only way to publish a package
+    doc = yaml.safe_load((REPO / ".github/workflows/release-python.yml").read_text())
+    assert doc[True] == {"release": {"types": ["published"]}}  # PyYAML reads the `on` key as True
+
+
+def test_only_the_publish_jobs_can_publish() -> None:
+    # PyPI's trusted publishing needs a job in the publishing workflow itself (not a reusable
+    # workflow) with an OIDC token. No other job gets one, and no job can change the repository or
+    # its releases.
+    token_jobs: set[str] = set()
+    for path in WORKFLOWS:
+        for name, job in yaml.safe_load(path.read_text())["jobs"].items():
+            permissions = job.get("permissions", {})
+            assert permissions.get("contents") != "write", f"{path.name}: {name}"
+            if permissions.get("id-token") == "write":
+                token_jobs.add(f"{path.name}:{name}")
+                assert "uses" not in job, f"{path.name}: {name}"
+                assert job["environment"] in ("testpypi", "pypi"), f"{path.name}: {name}"
+    assert token_jobs == {"release-python.yml:publish-testpypi", "release-python.yml:publish-pypi"}
+
+
+def test_release_python_reads_outputs_the_dry_run_provides() -> None:
+    release = (REPO / ".github/workflows/release-python.yml").read_text()
+    dry_run = yaml.safe_load((REPO / ".github/workflows/release-python-dry-run.yml").read_text())
+    outputs = dry_run[True]["workflow_call"]["outputs"]
+    assert set(re.findall(r"needs\.dry-run\.outputs\.([\w-]+)", release)) <= set(outputs)
+    for name, output in outputs.items():
+        assert output["value"] == f"${{{{ jobs.check.outputs.{name} }}}}"
+        assert name in dry_run["jobs"]["check"]["outputs"]
