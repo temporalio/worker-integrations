@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+import io
+import json
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 import pytest
 
 from conftest import make_python_package, replace_in_file, run_checker
+from lib.languages.python import Python
+from lib.release_version import ReleaseVersion
 
 
 @pytest.mark.parametrize("maturity", ["pre-release", "public-preview", "generally-available"])
@@ -102,3 +108,60 @@ def test_python_source_in_shared_is_rejected(repo: Path) -> None:
     make_python_package(repo)
     (repo / "python" / "_shared" / "helpers.py").write_text("x = 1\n")
     assert any("must be duplicated into each package" in v for v in run_checker(repo))
+
+
+@pytest.mark.parametrize("text,expected", [
+    ("0.0.1", ReleaseVersion((0, 0, 1))),
+    ("10.20.30", ReleaseVersion((10, 20, 30))),
+    ("1.0.0a1", ReleaseVersion((1, 0, 0), ("alpha", 1))),
+    ("1.0.0b2", ReleaseVersion((1, 0, 0), ("beta", 2))),
+    ("1.0.0rc0", ReleaseVersion((1, 0, 0), ("rc", 0))),
+    ("1.0.0rc10", ReleaseVersion((1, 0, 0), ("rc", 10))),
+])
+def test_python_release_version_parses(text: str, expected: ReleaseVersion) -> None:
+    version = Python().release_version(text)
+    assert version == expected
+    assert str(version) == text
+
+
+@pytest.mark.parametrize("text", [
+    "1.0", "1.0.0.0", "01.0.0", "v1.0.0",  # not X.Y.Z
+    "1.0.0-rc1", "1.0.0.rc1", "1.0.0RC1", "1.0.0c1", "1.0.0rc01", "1.0.0rc",  # non-canonical pre-releases
+    "1.0.0.post1", "1.0.0.dev1", "1.0.0+local", "1!1.0.0",  # unsupported PEP 440 features
+])
+def test_python_release_version_rejects_unsupported_versions(text: str) -> None:
+    with pytest.raises(ValueError, match="isn't a supported Python version"):
+        Python().release_version(text)
+
+
+def test_python_release_versions_order_pre_releases_before_their_release() -> None:
+    ordered = ["0.9.0", "1.0.0a1", "1.0.0a2", "1.0.0b1", "1.0.0rc1", "1.0.0rc10", "1.0.0", "1.0.1rc1", "1.0.1"]
+    versions = sorted(Python().release_version(text) for text in reversed(ordered))
+    assert [str(v) for v in versions] == ordered
+    assert [str(v) for v in versions if v.is_prerelease] == ["1.0.0a1", "1.0.0a2", "1.0.0b1", "1.0.0rc1", "1.0.0rc10", "1.0.1rc1"]
+
+
+def test_python_published_versions_reads_pypi(monkeypatch: pytest.MonkeyPatch) -> None:
+    def urlopen(url: str, timeout: float) -> io.BytesIO:
+        assert url == "https://pypi.org/pypi/temporalio-worker-integrations-x/json"
+        return io.BytesIO(json.dumps({"releases": {"0.1.0": [], "0.1.1": []}}).encode())
+
+    monkeypatch.setattr(urllib.request, "urlopen", urlopen)
+    assert Python().published_versions("temporalio-worker-integrations-x") == ["0.1.0", "0.1.1"]
+
+
+def test_python_published_versions_is_empty_for_an_unpublished_package(monkeypatch: pytest.MonkeyPatch) -> None:
+    def urlopen(url: str, timeout: float) -> io.BytesIO:
+        raise urllib.error.HTTPError(url, 404, "Not Found", None, None)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(urllib.request, "urlopen", urlopen)
+    assert Python().published_versions("temporalio-worker-integrations-x") == []
+
+
+def test_python_published_versions_fails_on_other_registry_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+    def urlopen(url: str, timeout: float) -> io.BytesIO:
+        raise urllib.error.HTTPError(url, 503, "Service Unavailable", None, None)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(urllib.request, "urlopen", urlopen)
+    with pytest.raises(urllib.error.HTTPError):
+        Python().published_versions("temporalio-worker-integrations-x")

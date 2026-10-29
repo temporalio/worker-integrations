@@ -76,7 +76,15 @@ The recommended steps to create a new release are as follows:
 
 1. Manually trigger a dry-run release CI workflow for the relevant language with the planned tag name,
    to confirm the validity of the release before the tag is actually created.
-   (TODO: these workflows don't exist yet)
+   (TODO: only Python has one so far) For example:
+
+   ```bash
+   gh workflow run release-<language>-dry-run.yml --ref main -f tag=<language>/<package>/v<version>
+   ```
+
+   The run's summary shows the commit it tested and whether to mark the release as a pre-release,
+   for the next steps.
+
 2. Generate release notes with the release tool.
    (TODO: this tool doesn't exist yet)
 3. Create a draft GitHub release (or pre-release when appropriate), targeting the commit tested in the

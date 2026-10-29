@@ -9,6 +9,7 @@ from typing import ClassVar, Protocol
 
 from lib.common import Package
 from lib.integration_toml import IntegrationMeta
+from lib.release_version import ReleaseVersion
 
 
 class CheckContext(Protocol):
@@ -57,6 +58,26 @@ class Language(ABC):
     @abstractmethod
     def check_package(self, ctx: CheckContext, package: Package, meta: IntegrationMeta | None) -> None:
         """Language-specific checks for one package. `meta` is None if its integration.toml is invalid."""
+
+    # -- releases (scripts/ci/check_release.py) --------------------------------------------------
+    @abstractmethod
+    def release_version(self, text: str) -> ReleaseVersion:
+        """Parse a version as spelled in this language's registry and release tags.
+
+        Without the release tag's "v": e.g. "1.2.3" for the tag python/<package>/v1.2.3.
+
+        Raises ValueError if it isn't a version we release.
+        """
+
+    @abstractmethod
+    def published_versions(self, published_name: str) -> list[str]:
+        """Every version of a package in this language's registry.
+
+        Spelled the way `release_version` takes them, e.g. without the "v" Go's module proxy uses.
+
+        Includes versions that can't be installed anymore but can't be reused either (e.g. yanked
+        ones). Empty if the package has never been published.
+        """
 
 
 def render_template(root: Path, language: str, folder: str, substitutions: dict[str, str]) -> list[Path]:

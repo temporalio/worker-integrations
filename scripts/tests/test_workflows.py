@@ -46,3 +46,12 @@ def test_ci_status_is_the_fan_in() -> None:
     status = jobs["ci-status"]
     assert status["if"] == "always()"
     assert set(status["needs"]) == set(jobs) - {"ci-status"}
+
+
+def test_release_python_dry_run_tests_the_checked_package_and_version() -> None:
+    # The test job builds what the check job validated, so its inputs must come from the check's outputs.
+    jobs = yaml.safe_load((REPO / ".github/workflows/release-python-dry-run.yml").read_text())["jobs"]
+    assert set(jobs["check"]["outputs"]) == {"package", "version"}
+    assert jobs["test"]["uses"] == "./.github/workflows/_python-package.yml"
+    assert jobs["test"]["with"]["package"] == "${{ needs.check.outputs.package }}"
+    assert jobs["test"]["with"]["version"] == "${{ needs.check.outputs.version }}"
