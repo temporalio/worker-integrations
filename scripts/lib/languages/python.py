@@ -1,4 +1,4 @@
-"""Python packages: naming, conventions checks and scaffolding.
+"""Python packages: naming, conventions checks, scaffolding and release versions.
 
 Checks (see AGENTS.md, "Python conventions"):
   * python/_shared does not contain Python source or stubs (only configuration, make logic, etc.)
@@ -11,17 +11,27 @@ Checks (see AGENTS.md, "Python conventions"):
     module-name) and with repository policy (version placeholder, license, uv settings)
   * standard test support files are byte-identical to python/_template
   * the published README has no relative links (PyPI renders it)
+
+Release versions are a small subset of PEP 440 (Python's version standard), in its canonical
+spelling: `X.Y.Z`, or a pre-release such as `X.Y.Zrc1` (phases a, b and rc). Post, dev and local
+versions and epochs aren't supported: post releases are rare in practice, and a patch release does
+the same job. Non-canonical spellings (e.g. `1.0` or `1.0.0-rc1`) are rejected because PyPI would
+publish them normalized, so the tag wouldn't match the published version.
 """
 
 from __future__ import annotations
 
+import json
 import re
+import urllib.error
+import urllib.request
 from pathlib import Path
 from typing import Any
 
 from lib.common import Package, load_toml
 from lib.integration_toml import IntegrationMeta
 from lib.languages._base import CheckContext, Language
+from lib.release_version import ReleaseVersion
 
 PROJECT_NAMESPACE = "temporalio.worker_integrations"
 PYTHON_MODULE_RE = re.compile(r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$")
@@ -41,6 +51,13 @@ STANDARD_TEST_SUPPORT = {
     "tests/test_installed_matches_source.py": "tests/test_installed_matches_source.py.tmpl",
 }
 MARKDOWN_RELATIVE_LINK = re.compile(r"\]\((\.\.?/)")
+# One number in a version (e.g. the 2 in 1.2.3 or in 1.0.0rc2), without leading zeros
+VERSION_NUMBER_PATTERN = r"(?:0|[1-9][0-9]*)"
+RELEASE_VERSION_RE = re.compile(
+    rf"(?P<release>{VERSION_NUMBER_PATTERN}\.{VERSION_NUMBER_PATTERN}\.{VERSION_NUMBER_PATTERN})"
+    rf"(?:(?P<phase>a|b|rc)(?P<number>{VERSION_NUMBER_PATTERN}))?"
+)
+PRE_RELEASE_PHASE_NAMES = {"a": "alpha", "b": "beta", "rc": "rc"}
 
 
 def names(root_api: str) -> tuple[str, str] | None:
@@ -160,6 +177,30 @@ class Python(Language):
         _check_pyproject(ctx, package, meta, pyproject)
 
         _check_readme(ctx, package, pyproject)
+
+    # -- releases --------------------------------------------------------------------------------
+    def release_version(self, text: str) -> ReleaseVersion:
+        m = RELEASE_VERSION_RE.fullmatch(text)
+        if not m:
+            raise ValueError(
+                f"{text!r} isn't a supported Python version: use X.Y.Z, or X.Y.Z followed by a pre-release "
+                "a<N>, b<N> or rc<N> (e.g. 1.0.0rc1). Post, dev and local versions aren't supported; "
+                "release the next patch version instead"
+            )
+        major, minor, patch = (int(n) for n in m["release"].split("."))
+        pre = (PRE_RELEASE_PHASE_NAMES[m["phase"]], int(m["number"])) if m["phase"] else None
+        return ReleaseVersion((major, minor, patch), pre, text)
+
+    def published_versions(self, published_name: str) -> list[str]:
+        # PyPI's JSON API lists yanked releases too. Any error other than a 404 propagates, so that
+        # a registry outage fails the release instead of looking like an unpublished package.
+        try:
+            with urllib.request.urlopen(f"https://pypi.org/pypi/{published_name}/json", timeout=30) as response:
+                return list(json.load(response)["releases"])
+        except urllib.error.HTTPError as exc:
+            if exc.code == 404:
+                return []
+            raise
 
 
 def _check_pyproject(ctx: CheckContext, package: Package, meta: IntegrationMeta, pyproject: dict[str, Any]) -> None:

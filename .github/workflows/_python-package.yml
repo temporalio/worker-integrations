@@ -14,6 +14,10 @@ on:
         description: Space-separated dependency modes for the matrix (locked, lowest, latest; see scripts/ci/matrix.py)
         type: string
         required: true
+      version:
+        description: Release version to build, e.g. 0.1.0 (release-python-dry-run.yml passes it from the tag; empty in ordinary CI, which builds the 0.0.0 placeholder)
+        type: string
+        default: ""
 
 permissions: {}
 
@@ -58,6 +62,7 @@ jobs:
       UV_NO_EDITABLE: "1" # an editable install can't extend the SDK-owned temporalio package from src/
       UV_LINK_MODE: copy
       DEPS: ${{ matrix.deps }} # read by every make target (python/_shared/python.mk)
+      RELEASE_VERSION: ${{ inputs.version }} # empty outside releases
       COLUMNS: "120"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -72,6 +77,11 @@ jobs:
       - name: Install GNU make (Windows)
         if: runner.os == 'Windows'
         run: choco install make -y --no-progress
+      - name: Set the release version
+        if: inputs.version != ''
+        # Updates pyproject.toml and the package's own entry in uv.lock. --no-sync leaves installing
+        # to `make sync`, which uses this cell's dependency mode.
+        run: cd "$PACKAGE_DIR" && uv version "$RELEASE_VERSION" --no-sync
       - name: Sync environment
         run: cd "$PACKAGE_DIR" && make sync
       - name: Lint and type-check
@@ -83,7 +93,7 @@ jobs:
         run: cd "$PACKAGE_DIR" && make build
       - name: Verify distributions
         if: matrix.build
-        run: uv run --project scripts --locked python scripts/ci/python/check_wheel.py --package-dir "$PACKAGE_DIR"
+        run: uv run --project scripts --locked python scripts/ci/python/check_wheel.py --package-dir "$PACKAGE_DIR" --version "$RELEASE_VERSION"
       - name: Smoke-test distributions
         if: matrix.build
         run: uv run --project scripts --locked python scripts/ci/python/smoke.py --package-dir "$PACKAGE_DIR"
