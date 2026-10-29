@@ -127,7 +127,7 @@ through that module's `IntegrationMeta`, which validates the schema; never index
   in the package's own `tests/conftest.py`.
 - **Smoke test:** CI installs the built wheel and sdist into clean environments, once without
   extras and once with all of them, imports the package's modules and runs the provenance guard.
-  List submodules that the root API doesn't import (e.g. public entry points), and that must work
+  Releases run it again on the files published to TestPyPI and PyPI. List submodules that the root API doesn't import (e.g. public entry points), and that must work
   without extras, in `integration.toml`'s `[smoke] imports`.
 
 ### Adding a Python package
@@ -183,7 +183,20 @@ suffix. If you change the template, keep `python/_template/` and
   expected version: `0.0.0`, or the release version.
 - Each language has one release dry-run workflow (e.g. `release-python-dry-run.yml`), dispatched
   with a planned release tag. It runs `scripts/ci/check_release.py`, then calls the language's
-  reusable workflow with the tag's version and the lockfile cells only. It never uploads anything.
+  reusable workflow with the tag's version and the lockfile cells only. It never publishes
+  anything.
+- Each language's release workflow (e.g. `release-python.yml`) runs only when a GitHub release is
+  published. It calls the dry-run workflow for the release's tag, checks that the tag is on `main`
+  and that the release's pre-release flag matches `check_release.py`'s, then publishes the files
+  the dry run built and tested (for Python, to TestPyPI and then PyPI, each followed by a smoke
+  test). Publishing uses trusted publishing (no stored credentials), so the publish jobs must be
+  in the release workflow itself, never in a reusable workflow, and they're the only jobs with
+  `id-token: write` (enforced by `scripts/tests/test_workflows.py`). Each package needs its own
+  trusted publishers on PyPI and TestPyPI before its first release, set up by a PyPI organization
+  admin (see the next steps `scripts/new_package.py` prints). Retry a failed release by
+  re-running only its failed jobs ("Re-run jobs" > "Re-run failed jobs" on the run's page in GitHub
+  Actions, or `gh run rerun <run ID> --failed`); if the workflow itself needs a fix, release the
+  next version. Runs for the same tag share a concurrency group, so they can't overlap.
 - `scripts/ci/check_conventions.py` checks repository invariants on every run.
 - `ci-status` is the only required check. Every other job in `ci.yml` must be listed in its
   `needs` (enforced by `scripts/tests/test_workflows.py`).

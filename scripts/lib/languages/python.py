@@ -90,7 +90,12 @@ class Python(Language):
   1. Add the package's dependencies to pyproject.toml (declare exactly what it imports), and set
      the real temporalio floor there and in README.md's Compatibility section.
   2. cd python/{folder} && make sync   # creates uv.lock; commit it
-  3. make lint && make test"""
+  3. make lint && make test
+  4. Before the package's first release, ask a PyPI organization admin to add two pending trusted
+     publishers for its published name (in integration.toml), each with repository
+     temporalio/worker-integrations and workflow release-python.yml:
+       - on pypi.org, with environment pypi
+       - on test.pypi.org, with environment testpypi"""
 
     # -- scaffolding -----------------------------------------------------------------------------
     def package_folder(self, requested: str) -> str:

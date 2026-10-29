@@ -55,4 +55,5 @@ uv run --project scripts --locked python scripts/new_package.py \
 
 This creates the package folder from `_template/` and prints suggested next steps.
 Loosely, this entails adding dependencies, setting the supported `temporalio` SDK versions,
-and updating the lock file.
+and updating the lock file. Before the package's first release, it also needs trusted publishers
+on PyPI and TestPyPI, which a PyPI organization admin sets up; the printed steps list the details.

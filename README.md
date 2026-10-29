@@ -105,4 +105,17 @@ The recommended steps to create a new release are as follows:
 4. Publish the release from the draft, letting GitHub create the specified tag.
 5. Monitor the CI workflows triggered automatically by the release publication, which will publish a
    new package version to the language-specific package registry (if relevant) and run smoke tests.
-   (TODO: these workflows don't exist yet)
+   (TODO: only Python has one so far)
+   - If a job fails, re-run only the failed jobs, either on the run's page in GitHub Actions (click
+     "Re-run jobs", then "Re-run failed jobs") or from the command line:
+
+     ```bash
+     gh run list --workflow release-<language>.yml   # find the run's ID
+     gh run rerun <run-id> --failed
+     ```
+
+   - If the release workflow itself needs a fix, merge the fix and release the next version instead.
+     Its release notes should then also cover the version that was never published: pass
+     `--since <last published release tag>` to `scripts/release_notes.py`. It's also worth editing
+     the unpublished version's release notes to say it wasn't published, and which version replaces
+     it.
