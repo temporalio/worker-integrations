@@ -97,3 +97,13 @@ jobs:
       - name: Smoke-test distributions
         if: matrix.build
         run: uv run --project scripts --locked python scripts/ci/python/smoke.py --package-dir "$PACKAGE_DIR"
+      - name: Save distributions for publishing
+        # Only in release builds: release-python.yml publishes these exact files
+        if: matrix.build && inputs.version != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dist-${{ inputs.package }}
+          path: python/${{ inputs.package }}/dist
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: true # a re-run of this job replaces the artifact instead of failing

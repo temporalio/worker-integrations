@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import io
+import json
 import re
 import shutil
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 import pytest
@@ -70,3 +74,88 @@ def test_provenance_guard_runs(built: Path, tmp_path: Path) -> None:
 
 def test_no_distributions(built: Path, tmp_path: Path) -> None:
     assert smoke.smoke(built, tmp_path) == [f"no wheel or sdist in {tmp_path}"]
+
+
+NAME = "temporalio-worker-integrations-aws-lambda-worker"
+WHEEL = (f"{NAME.replace('-', '_')}-0.1.0-py3-none-any.whl", "https://files.example/wheel")
+SDIST = (f"{NAME.replace('-', '_')}-0.1.0.tar.gz", "https://files.example/sdist")
+
+
+def serve_index(monkeypatch: pytest.MonkeyPatch, responses: list[list[tuple[str, str]] | None]) -> list[str]:
+    """Make each index check see the next response's files (None: a 404), and skip the waits.
+
+    Returns the URLs requested.
+    """
+    requested: list[str] = []
+
+    def urlopen(url: str, timeout: float) -> io.BytesIO:
+        requested.append(url)
+        files = responses[min(len(requested), len(responses)) - 1]
+        if files is None:
+            raise urllib.error.HTTPError(url, 404, "Not Found", None, None)  # type: ignore[arg-type]
+        return io.BytesIO(json.dumps({"urls": [{"filename": f, "url": u} for f, u in files]}).encode())
+
+    monkeypatch.setattr(urllib.request, "urlopen", urlopen)
+    monkeypatch.setattr(smoke.time, "sleep", lambda seconds: None)
+    return requested
+
+
+def test_index_files_waits_until_both_files_are_listed(monkeypatch: pytest.MonkeyPatch) -> None:
+    requested = serve_index(monkeypatch, [None, [WHEEL], [SDIST, WHEEL]])
+    assert smoke.index_files("testpypi", NAME, "0.1.0") == [WHEEL, SDIST]
+    assert requested == [f"https://test.pypi.org/pypi/{NAME}/0.1.0/json"] * 3
+
+
+def test_index_files_gives_up_after_the_last_check(monkeypatch: pytest.MonkeyPatch) -> None:
+    requested = serve_index(monkeypatch, [[WHEEL]])
+    assert smoke.index_files("pypi", NAME, "0.1.0") is None
+    assert len(requested) == smoke.INDEX_CHECKS
+
+
+def test_index_files_fails_on_other_index_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+    def urlopen(url: str, timeout: float) -> io.BytesIO:
+        raise urllib.error.HTTPError(url, 503, "Service Unavailable", None, None)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(urllib.request, "urlopen", urlopen)
+    with pytest.raises(urllib.error.HTTPError):
+        smoke.index_files("pypi", NAME, "0.1.0")
+
+
+def planned_installs(monkeypatch: pytest.MonkeyPatch) -> list[list[tuple[str, str, list[str]]]]:
+    """Record the installs each smoke test plans, instead of running them."""
+    planned: list[list[tuple[str, str, list[str]]]] = []
+    monkeypatch.setattr(smoke, "_smoke", lambda package_dir, installs: planned.append(installs) or [])
+    return planned
+
+
+def test_testpypi_installs_the_listed_files_by_url(built: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    serve_index(monkeypatch, [[WHEEL, SDIST]])
+    planned = planned_installs(monkeypatch)
+    assert smoke.smoke_index(built, "testpypi", "0.1.0") == []
+    assert planned == [[
+        (f"{WHEEL[0]} from TestPyPI", f" @ {WHEEL[1]}", []),
+        (f"{SDIST[0]} from TestPyPI", f" @ {SDIST[1]}", []),
+    ]]
+
+
+def test_pypi_installs_the_version_through_the_index(built: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    serve_index(monkeypatch, [[WHEEL, SDIST]])
+    planned = planned_installs(monkeypatch)
+    assert smoke.smoke_index(built, "pypi", "0.1.0") == []
+    assert planned == [[
+        ("wheel from PyPI", "==0.1.0", ["--only-binary", NAME, "--refresh-package", NAME]),
+        ("sdist from PyPI", "==0.1.0", ["--no-binary", NAME, "--refresh-package", NAME]),
+    ]]
+
+
+def test_unlisted_version_is_a_problem(built: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    serve_index(monkeypatch, [None])
+    planned = planned_installs(monkeypatch)
+    assert smoke.smoke_index(built, "pypi", "0.1.0") == [f"pypi doesn't list both a wheel and an sdist for {NAME} 0.1.0"]
+    assert planned == []
+
+
+@pytest.mark.parametrize("args", [["--index", "pypi"], ["--version", "0.1.0"]])
+def test_index_and_version_go_together(built: Path, args: list[str]) -> None:
+    with pytest.raises(SystemExit):
+        smoke.main(["--package-dir", str(built), *args])
