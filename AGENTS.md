@@ -62,12 +62,19 @@ through that module's `IntegrationMeta`, which validates the schema; never index
 ## Versions and tags
 
 - A new published name starts at `0.0.1` (Pre-release), `0.1.0` (Public Preview) or `1.0.0`
-  (Generally Available).
+  (Generally Available), or a pre-release of that version.
 - A published name that already exists (e.g. one previously published from an SDK repository)
-  continues from its highest published version.
+  continues from its highest published version: every release must be greater than every
+  published version, yanked ones included.
+- A package's version is always at least the first version for its current maturity (or a
+  pre-release of it): raising a package's maturity means its next release starts there, e.g. at
+  `1.0.0` once it's Generally Available.
 - Release tags are `<language>/<package>/v<version>`, e.g. `python/aws_lambda_worker/v0.1.0` or
   `go/aws/lambda/otel/v0.1.0`: the first segment is the language, the last is the version, and
-  everything in between is the package's folder path. Never move or delete a release tag.
+  everything in between is the package's folder path. The version is spelled exactly as the
+  language's registry publishes it (e.g. `0.1.0rc1` for Python), so that the tag matches the
+  published version. Never move or delete a release tag.
+- `scripts/ci/check_release.py` enforces these rules at the start of every release workflow.
 - Each package's `README.md` states the range of base SDK versions it supports. Package versions
   do not imply compatibility with the same-numbered SDK version.
 
@@ -90,8 +97,12 @@ through that module's `IntegrationMeta`, which validates the schema; never index
   targets (`make help`) rather than plain `uv sync`/`uv run`. The provenance guard in
   `tests/conftest.py` fails the test run if the installed package isn't a clean, non-editable
   install.
-- **Versions:** `[project] version` stays `0.0.0`; release tags supply the published version. The
-  first `[ci] runtime-versions` entry must equal the `requires-python` floor.
+- **Versions:** `[project] version` stays `0.0.0`; release tags supply the published version,
+  which release builds set with `uv version --no-sync` before `make sync`. The first
+  `[ci] runtime-versions` entry must equal the `requires-python` floor.
+- **Release versions** are `X.Y.Z` or a pre-release of it, `X.Y.Z` followed by `a<N>`, `b<N>` or
+  `rc<N>` (e.g. `0.1.0rc1`), in canonical PEP 440 spelling. Post, dev and local versions and
+  epochs aren't supported: release the next patch version instead.
 - **Dependencies:** `exclude-newer = "2 weeks"` (a supply-chain cooldown) with
   `exclude-newer-package = { temporalio = false }`, so a new SDK release can be adopted the day
   it ships. Declare exactly what the package imports at module level; optional integrations go in
@@ -164,7 +175,11 @@ suffix. If you change the template, keep `python/_template/` and
 - On the Ubuntu cell at the maximum version (of the lockfile cells, and of the newest-versions
   cells), the Python workflow also runs `make build`, checks the wheel with
   `scripts/ci/python/check_wheel.py`, and smoke-tests the wheel and sdist in clean environments with
-  `scripts/ci/python/smoke.py`.
+  `scripts/ci/python/smoke.py`. The wheel check also checks that both distributions have the
+  expected version: `0.0.0`, or the release version.
+- Each language has one release dry-run workflow (e.g. `release-python-dry-run.yml`), dispatched
+  with a planned release tag. It runs `scripts/ci/check_release.py`, then calls the language's
+  reusable workflow with the tag's version and the lockfile cells only. It never uploads anything.
 - `scripts/ci/check_conventions.py` checks repository invariants on every run.
 - `ci-status` is the only required check. Every other job in `ci.yml` must be listed in its
   `needs` (enforced by `scripts/tests/test_workflows.py`).
@@ -174,9 +189,9 @@ suffix. If you change the template, keep `python/_template/` and
   shared code in the `scripts/lib/` package (stdlib only, since `detect_changes.py` runs before
   uv is installed). Entry scripts put `scripts/` on `sys.path` and import `lib.*`. Run its tests
   with `uv run --project scripts --locked pytest scripts/tests -q`.
-- Each language's tooling rules (naming, conventions checks, scaffolding) live in one module,
-  `scripts/lib/languages/<language>.py`, as a subclass of `Language` (`_base.py`) registered in
-  `TOOLED_LANGUAGES`. Adding tooling for a language means adding that module, a
-  `<language>/_template/` if needed, any scripts only its workflow runs in
+- Each language's tooling rules (naming, conventions checks, scaffolding, release versions and
+  registry lookups) live in one module, `scripts/lib/languages/<language>.py`, as a subclass of
+  `Language` (`_base.py`) registered in `TOOLED_LANGUAGES`. Adding tooling for a language means
+  adding that module, a `<language>/_template/` if needed, any scripts only its workflow runs in
   `scripts/ci/<language>/`, and their tests. Name language-specific test files
   `test_<language>_*.py` (e.g. `test_python_language.py`).

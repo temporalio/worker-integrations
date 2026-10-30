@@ -1,0 +1,55 @@
+# Release dry run for ONE Python package, selected by its planned release tag
+# (python/<package>/v<version>, e.g. python/aws_lambda_worker/v0.1.0). Dispatch it on main
+# before creating a release. It never uploads or tags anything.
+#
+#   check  -> check the tag and version (scripts/ci/check_release.py)
+#   test   -> _python-package.yml for the package with the tag's version injected: the lockfile
+#             matrix, then building and checking the distributions
+name: Release dry run (Python)
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to dry-run, e.g. python/aws_lambda_worker/v0.1.0
+        type: string
+        required: true
+
+permissions: {}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  check:
+    name: Check release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      package: ${{ steps.check.outputs.package }}
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version-file: scripts/pyproject.toml
+      - name: Check the tag and version
+        id: check
+        env:
+          TAG: ${{ inputs.tag }}
+        run: uv run --project scripts --locked python scripts/ci/check_release.py --language python "$TAG" --github-output "$GITHUB_OUTPUT" --github-step-summary "$GITHUB_STEP_SUMMARY"
+
+  test:
+    name: Test
+    needs: check
+    permissions:
+      contents: read
+    uses: ./.github/workflows/_python-package.yml
+    with:
+      package: ${{ needs.check.outputs.package }}
+      deps: locked
+      version: ${{ needs.check.outputs.version }}
