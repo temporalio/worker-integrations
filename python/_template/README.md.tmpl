@@ -9,6 +9,12 @@ Published as [`__PUBLISHED_NAME__`](https://pypi.org/project/__PUBLISHED_NAME__/
 uv add __PUBLISHED_NAME__
 ```
 
+This also installs `temporalio`, the Temporal Python SDK, if it isn't installed already. If you
+install packages into separate directories instead of one environment (for example with
+`pip install --target`), make sure this package goes in the same directory as `temporalio`. Since
+it's part of the `temporalio` package, Python only looks for it in the directory where `temporalio`
+is installed.
+
 ## Compatibility
 
 Supports `temporalio` versions `>=1.34.0,<2`. Package versions do not imply compatibility with the
