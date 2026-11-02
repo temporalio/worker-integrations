@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import shutil
+import subprocess
 import zipfile
 from pathlib import Path
 
 import pytest
 
 from ci.python import check_wheel
+from conftest import build_python_package
 
 ROOT_API_PATH = "temporalio/worker_integrations/aws/lambda_worker"
 
@@ -42,6 +44,14 @@ def test_requires_exactly_one_wheel(built: Path, tmp_path: Path) -> None:
     assert problems[0].startswith("expected exactly one wheel")
 
 
+def test_requires_exactly_one_sdist(built: Path, tmp_path: Path) -> None:
+    for wheel in (built / "dist").glob("*.whl"):
+        shutil.copy(wheel, tmp_path)
+    problems = check_wheel.check(built, tmp_path)
+    assert len(problems) == 1
+    assert problems[0].startswith("expected exactly one sdist")
+
+
 @pytest.mark.parametrize("name", [
     "temporalio/__init__.py",
     "temporalio/worker_integrations/__init__.py",
@@ -74,3 +84,22 @@ def test_bytecode_caches_are_ignored(built: Path, tmp_path: Path) -> None:
     cache.mkdir()
     (cache / "__init__.cpython-314.pyc").write_bytes(b"")
     assert check_wheel.check(d, d / "dist") == []
+
+
+def test_distributions_must_have_the_expected_version(built: Path) -> None:
+    (wheel,) = (built / "dist").glob("*.whl")
+    (sdist,) = (built / "dist").glob("*.tar.gz")
+    assert check_wheel.check(built, built / "dist", "0.1.0") == [
+        f"{wheel.name} has version '0.0.0', expected '0.1.0'",
+        f"{sdist.name} has version '0.0.0', expected '0.1.0'",
+    ]
+
+
+def test_injected_release_version_passes(built: Path, tmp_path: Path) -> None:
+    # The same command release builds use to set the version (--frozen here, since the test
+    # package's uv.lock is a stand-in)
+    d = Path(shutil.copytree(built, tmp_path / built.name))
+    shutil.rmtree(d / "dist")
+    subprocess.run(["uv", "version", "0.1.0rc1", "--frozen"], cwd=d, check=True, capture_output=True)
+    build_python_package(d)
+    assert check_wheel.check(d, d / "dist", "0.1.0rc1") == []
