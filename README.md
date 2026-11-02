@@ -85,10 +85,23 @@ The recommended steps to create a new release are as follows:
    The run's summary shows the commit it tested and whether to mark the release as a pre-release,
    for the next steps.
 
-2. Generate release notes with the release tool.
-   (TODO: this tool doesn't exist yet)
+2. Generate release notes with `scripts/release_notes.py`, after fetching the existing tags. For
+   example:
+
+   ```bash
+   git fetch --tags
+   uv run --project scripts --locked python scripts/release_notes.py \
+       <language>/<package>/v<version> --ref <tested-commit> > notes.md
+   ```
+
 3. Create a draft GitHub release (or pre-release when appropriate), targeting the commit tested in the
-   dry run.
+   dry run. For example:
+
+   ```bash
+   # Add --prerelease if the dry run's summary says to
+   gh release create <language>/<package>/v<version> --target <tested-commit> --draft --notes-file notes.md
+   ```
+
 4. Publish the release from the draft, letting GitHub create the specified tag.
 5. Monitor the CI workflows triggered automatically by the release publication, which will publish a
    new package version to the language-specific package registry (if relevant) and run smoke tests.

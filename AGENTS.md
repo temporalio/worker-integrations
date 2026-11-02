@@ -75,6 +75,10 @@ through that module's `IntegrationMeta`, which validates the schema; never index
   language's registry publishes it (e.g. `0.1.0rc1` for Python), so that the tag matches the
   published version. Never move or delete a release tag.
 - `scripts/ci/check_release.py` enforces these rules at the start of every release workflow.
+- `scripts/release_notes.py` generates a release's notes from the subjects of the commits that
+  changed the package since its previous release (for a final release, the previous final
+  release), excluding packages nested inside it. Commit subjects are therefore user-facing: on a
+  squash merge, the pull request's title becomes the subject.
 - Each package's `README.md` states the range of base SDK versions it supports. Package versions
   do not imply compatibility with the same-numbered SDK version.
 
