@@ -16,13 +16,15 @@ is built. Checks:
 Registries refuse to replace a published version, and users' version ranges assume versions only
 increase, so each release must be greater than every version already published.
 
-Outputs, for the jobs that test and build the release:
+Outputs, for the jobs that test, build and publish the release:
 
-  package  the package's folder, relative to the language root (e.g. aws_lambda_worker)
-  version  the version, as spelled after the tag's "v" (e.g. 0.1.0)
+  package     the package's folder, relative to the language root (e.g. aws_lambda_worker)
+  version     the version, as spelled after the tag's "v" (e.g. 0.1.0)
+  prerelease  "true" if the GitHub release must be marked as a pre-release (the version is a
+              pre-release, or the maturity is pre-release), otherwise "false"
 
-The step summary lists the tested commit and whether to mark the GitHub release as a pre-release
-(if the version is a pre-release or the maturity is pre-release), for creating the release.
+The step summary lists the tested commit and whether to mark the GitHub release as a pre-release,
+for creating the release.
 """
 
 from __future__ import annotations
@@ -102,8 +104,11 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  - {p}")
         return 1
 
-    write_github_output(args.github_output, {"package": tag.package.name, "version": str(tag.version)})
     prerelease = tag.version.is_prerelease or meta.maturity == "pre-release"
+    write_github_output(
+        args.github_output,
+        {"package": tag.package.name, "version": str(tag.version), "prerelease": "true" if prerelease else "false"},
+    )
     if args.github_step_summary:
         with open(args.github_step_summary, "a", encoding="utf-8") as fh:
             fh.write(
