@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import importlib
 import inspect
 import logging
 import os
@@ -11,6 +10,8 @@ from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Any, TypeAlias
+
+import modal
 
 import temporalio.client
 import temporalio.worker
@@ -66,13 +67,8 @@ def _default_load_config(getenv: Callable[[str], str | None]) -> ClientConfigPro
 
 
 def _default_get_function_call_id() -> str:
-    try:
-        modal = importlib.import_module("modal")
-    except ImportError as err:
-        raise RuntimeError(
-            "the Modal Python package is required to run a Modal worker"
-        ) from err
-    return modal.current_function_call_id()
+    # current_function_call_id() is typed str | None; build_modal_identity maps "" to "unknown".
+    return modal.current_function_call_id() or ""
 
 
 def _validate_version(version: WorkerDeploymentVersion) -> None:
