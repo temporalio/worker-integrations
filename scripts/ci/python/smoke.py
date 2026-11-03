@@ -131,6 +131,8 @@ def _smoke(package_dir: Path, installs: list[tuple[str, str, list[str]]]) -> lis
     The version spec is what follows the package's name and extras in the requirement, e.g.
     " @ <url>" or "==1.0.0".
     """
+    # _check runs its commands from a temporary directory, so paths passed to them must be absolute.
+    package_dir = package_dir.resolve()
     meta = IntegrationMeta.from_file(package_dir / "integration.toml")
     extras = sorted(load_toml(package_dir / "pyproject.toml").get("project", {}).get("optional-dependencies", {}))
     provenance = package_dir / "tests" / "helpers" / "provenance.py"
