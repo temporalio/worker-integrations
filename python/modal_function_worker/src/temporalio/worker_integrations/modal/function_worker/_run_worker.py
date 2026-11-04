@@ -292,12 +292,19 @@ async def _invocation_config_scope(
 ) -> AsyncGenerator[ModalWorkerConfig, None]:
     """Run configure setup and bracket any async teardown around the worker."""
     if inspect.isasyncgenfunction(configure):
+        # Wrap the bare async generator so it drives like a context manager: setup on
+        # enter, teardown on exit.
         cm: Any = asynccontextmanager(configure)(config)
     else:
         result = configure(config)
         if inspect.isawaitable(result):
             await result
+        # A @asynccontextmanager-decorated callback returns the context manager directly.
         cm = result if result is not None and hasattr(result, "__aenter__") else None
+        if inspect.isasyncgen(result):
+            # A callable that returns an async generator (e.g. an object whose
+            # __call__ is an async generator function) drives like the bare form.
+            cm = asynccontextmanager(lambda: result)()
 
     if cm is not None:
         async with cm:

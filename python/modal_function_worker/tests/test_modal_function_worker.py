@@ -593,3 +593,34 @@ class TestRunWorkerInternal:
         )
 
         assert events == ["setup", "teardown"]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "form", ["callable_object", "function_returning_generator"]
+    )
+    async def test_callback_returning_async_generator_brackets_worker(
+        self, form: str
+    ) -> None:
+        events: list[str] = []
+        worker_kwargs: list[dict[str, Any]] = []
+        deps = _make_test_deps(worker_kwargs_capture=worker_kwargs)
+
+        class Configure:
+            async def __call__(self, config: ModalWorkerConfig):
+                events.append("setup")
+                config.worker_config["task_queue"] = "configured-queue"
+                yield
+                events.append("teardown")
+
+        configure: Any = (
+            Configure()
+            if form == "callable_object"
+            else lambda config: Configure()(config)
+        )
+
+        await _run_worker_internal(
+            TEST_VERSION, configure, TEST_MODAL_FUNCTION_TIMEOUT, deps
+        )
+
+        assert events == ["setup", "teardown"]
+        assert worker_kwargs[0]["task_queue"] == "configured-queue"
