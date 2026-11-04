@@ -76,7 +76,12 @@ VERSION = WorkerDeploymentVersion(
     build_id="v1.0",
 )
 
-app = modal.App("temporal-worker")
+image = (
+    modal.Image.debian_slim()
+    .pip_install("temporalio-worker-integrations-modal-function-worker")
+    .add_local_python_source("activities", "workflows")
+)
+app = modal.App("temporal-worker", image=image)
 
 
 def configure(config: ModalWorkerConfig) -> None:
@@ -85,7 +90,11 @@ def configure(config: ModalWorkerConfig) -> None:
     config.worker_config["activities"] = [greet]
 
 
-@app.function(timeout=int(FUNCTION_TIMEOUT.total_seconds()))
+@app.function(
+    timeout=int(FUNCTION_TIMEOUT.total_seconds()),
+    # Sets TEMPORAL_ADDRESS, TEMPORAL_NAMESPACE and TEMPORAL_API_KEY for temporalio.envconfig
+    secrets=[modal.Secret.from_name("temporal")],
+)
 async def temporal_worker() -> None:
     await run_worker(
         VERSION,
