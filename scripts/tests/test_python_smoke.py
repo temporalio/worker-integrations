@@ -31,6 +31,12 @@ def test_template_build_passes(built: Path, capsys: pytest.CaptureFixture[str]) 
     assert re.search(r"^temporalio +\d", out, re.MULTILINE)
 
 
+def test_relative_package_dir(built: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    # CI passes the package dir relative to the repository root, e.g. python/<package>.
+    monkeypatch.chdir(built.parent)
+    assert smoke.main(["--package-dir", built.name]) == 0, capsys.readouterr().out
+
+
 def test_every_module_is_imported(built: Path, tmp_path: Path) -> None:
     d = copy_package(built, tmp_path)
     (d / PKG_DIR / "_broken.py").write_text("raise RuntimeError('boom')\n")
