@@ -122,6 +122,22 @@ class TestModalWorkerConfig:
 
         assert calls == ["sync", "failing", "async"]
 
+    @pytest.mark.asyncio
+    async def test_shutdown_hooks_await_tasks_before_the_next_hook(self) -> None:
+        config = ModalWorkerConfig(execution_timeout=TEST_EXECUTION_TIMEOUT)
+        calls: list[str] = []
+
+        async def flush() -> None:
+            await asyncio.sleep(0)
+            calls.append("flushed")
+
+        config.shutdown_hooks.extend(
+            [lambda: asyncio.ensure_future(flush()), lambda: calls.append("next")]
+        )
+        await _run_shutdown_hooks(config)
+
+        assert calls == ["flushed", "next"]
+
 
 class TestDefaults:
     def test_apply_modal_worker_defaults(self) -> None:
@@ -576,6 +592,53 @@ class TestRunWorkerInternal:
         )
 
         assert events == ["setup", "connect", "shutdown", "teardown"]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("form", ["function", "async_generator"])
+    async def test_shutdown_hooks_run_when_configure_raises(self, form: str) -> None:
+        events: list[str] = []
+        deps = _make_test_deps()
+
+        def setup(config: ModalWorkerConfig) -> None:
+            events.append("setup")
+            config.shutdown_hooks.append(lambda: events.append("shutdown"))
+            raise RuntimeError("setup failed")
+
+        async def generator_configure(config: ModalWorkerConfig):
+            setup(config)
+            yield
+
+        configure: Any = setup if form == "function" else generator_configure
+
+        with pytest.raises(RuntimeError, match="setup failed"):
+            await _run_worker_internal(
+                TEST_VERSION, configure, TEST_MODAL_FUNCTION_TIMEOUT, deps
+            )
+
+        assert events == ["setup", "shutdown"]
+
+    @pytest.mark.asyncio
+    async def test_shutdown_hooks_run_before_teardown_when_task_queue_missing(
+        self,
+    ) -> None:
+        events: list[str] = []
+        deps = _make_test_deps()
+        deps.getenv = lambda _name: None
+
+        async def configure(config: ModalWorkerConfig):
+            events.append("setup")
+            config.shutdown_hooks.append(lambda: events.append("shutdown"))
+            try:
+                yield
+            finally:
+                events.append("teardown")
+
+        with pytest.raises(ValueError, match="task queue not configured"):
+            await _run_worker_internal(
+                TEST_VERSION, configure, TEST_MODAL_FUNCTION_TIMEOUT, deps
+            )
+
+        assert events == ["setup", "shutdown", "teardown"]
 
     @pytest.mark.asyncio
     async def test_async_context_manager_configure(self) -> None:

@@ -6,10 +6,14 @@ import logging
 import os
 import time
 from collections.abc import AsyncGenerator, Awaitable, Callable
-from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from contextlib import (
+    AbstractAsyncContextManager,
+    AsyncExitStack,
+    asynccontextmanager,
+)
 from dataclasses import dataclass, field
 from datetime import timedelta
-from typing import Any, TypeAlias
+from typing import TypeAlias
 
 import modal
 
@@ -228,6 +232,7 @@ async def _run_worker_internal(
 
     async with _invocation_config_scope(configure, config):
         try:
+            _validate_task_queue(config)
             _validate_function_timeout(config, modal_function_timeout)
             shutdown_buffer = _resolve_shutdown_deadline_buffer(config)
             work_time = _work_time(
@@ -291,25 +296,35 @@ async def _invocation_config_scope(
     config: ModalWorkerConfig,
 ) -> AsyncGenerator[ModalWorkerConfig, None]:
     """Run configure setup and bracket any async teardown around the worker."""
+    async with AsyncExitStack() as teardown:
+        try:
+            cm = await _run_configure(configure, config)
+            if cm is not None:
+                await teardown.enter_async_context(cm)
+        except BaseException:
+            # The caller runs shutdown hooks only once setup completes. Run the hooks
+            # registered before setup failed, so the resources they release aren't
+            # left open in a reused container.
+            await _run_shutdown_hooks(config)
+            raise
+        yield config
+
+
+async def _run_configure(
+    configure: ConfigureCallback,
+    config: ModalWorkerConfig,
+) -> AbstractAsyncContextManager[None] | None:
+    """Call configure; return a context manager to enter for its setup and teardown."""
     if inspect.isasyncgenfunction(configure):
         # Wrap the bare async generator so it drives like a context manager: setup on
         # enter, teardown on exit.
-        cm: Any = asynccontextmanager(configure)(config)
-    else:
-        result = configure(config)
-        if inspect.isawaitable(result):
-            await result
-        # A @asynccontextmanager-decorated callback returns the context manager directly.
-        cm = result if result is not None and hasattr(result, "__aenter__") else None
-        if inspect.isasyncgen(result):
-            # A callable that returns an async generator (e.g. an object whose
-            # __call__ is an async generator function) drives like the bare form.
-            cm = asynccontextmanager(lambda: result)()
-
-    if cm is not None:
-        async with cm:
-            _validate_task_queue(config)
-            yield config
-    else:
-        _validate_task_queue(config)
-        yield config
+        return asynccontextmanager(configure)(config)
+    result = configure(config)
+    if inspect.isawaitable(result):
+        await result
+    if inspect.isasyncgen(result):
+        # A callable that returns an async generator (e.g. an object whose
+        # __call__ is an async generator function) drives like the bare form.
+        return asynccontextmanager(lambda: result)()
+    # A @asynccontextmanager-decorated callback returns the context manager directly.
+    return result if isinstance(result, AbstractAsyncContextManager) else None
