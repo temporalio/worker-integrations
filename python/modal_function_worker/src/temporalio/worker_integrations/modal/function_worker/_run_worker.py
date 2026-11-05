@@ -6,10 +6,14 @@ import logging
 import os
 import time
 from collections.abc import AsyncGenerator, Awaitable, Callable
-from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from contextlib import (
+    AbstractAsyncContextManager,
+    AsyncExitStack,
+    asynccontextmanager,
+)
 from dataclasses import dataclass, field
 from datetime import timedelta
-from typing import Any, TypeAlias
+from typing import TypeAlias
 
 import modal
 
@@ -227,62 +231,60 @@ async def _run_worker_internal(
         config.worker_config["task_queue"] = env_task_queue
 
     async with _invocation_config_scope(configure, config):
-        try:
-            _validate_function_timeout(config, modal_function_timeout)
-            shutdown_buffer = _resolve_shutdown_deadline_buffer(config)
-            work_time = _work_time(
-                config,
-                shutdown_buffer,
-                invocation_started,
-                deps.monotonic,
+        _validate_task_queue(config)
+        _validate_function_timeout(config, modal_function_timeout)
+        shutdown_buffer = _resolve_shutdown_deadline_buffer(config)
+        work_time = _work_time(
+            config,
+            shutdown_buffer,
+            invocation_started,
+            deps.monotonic,
+        )
+        if work_time <= timedelta(seconds=1):
+            raise RuntimeError(
+                "Modal execution timeout is too short: "
+                f"{config.execution_timeout.total_seconds():.1f}s configured but "
+                f"{shutdown_buffer.total_seconds():.1f}s is "
+                "reserved for shutdown, leaving no time for work after setup. "
+                "Increase the Modal Function timeout, increase execution_timeout "
+                "if it was shortened, or decrease shutdown_deadline_buffer"
             )
-            if work_time <= timedelta(seconds=1):
-                raise RuntimeError(
-                    "Modal execution timeout is too short: "
-                    f"{config.execution_timeout.total_seconds():.1f}s configured but "
-                    f"{shutdown_buffer.total_seconds():.1f}s is "
-                    "reserved for shutdown, leaving no time for work after setup. "
-                    "Increase the Modal Function timeout, increase execution_timeout "
-                    "if it was shortened, or decrease shutdown_deadline_buffer"
-                )
-            if work_time < timedelta(seconds=5):
-                logger.warning(
-                    "Modal execution timeout leaves less than 5s for work after setup "
-                    "and the shutdown buffer; consider increasing the Modal Function "
-                    "timeout, increasing execution_timeout if it was shortened, or "
-                    "decreasing shutdown_deadline_buffer "
-                    "(work_time=%s, shutdown_buffer=%s)",
-                    work_time,
-                    shutdown_buffer,
-                )
-
-            invocation_connect_config: ClientConnectConfig = {
-                **config.client_connect_config
-            }
-            if "identity" not in invocation_connect_config:
-                get_function_call_id = (
-                    deps.get_function_call_id or _default_get_function_call_id
-                )
-                invocation_connect_config["identity"] = build_modal_identity(
-                    get_function_call_id(), deps.getenv(ENV_MODAL_TASK_ID) or ""
-                )
-
-            client = await deps.connect(**invocation_connect_config)
-            worker = deps.create_worker(client, **config.worker_config)
-
-            work_time = _work_time(
-                config,
+        if work_time < timedelta(seconds=5):
+            logger.warning(
+                "Modal execution timeout leaves less than 5s for work after setup "
+                "and the shutdown buffer; consider increasing the Modal Function "
+                "timeout, increasing execution_timeout if it was shortened, or "
+                "decreasing shutdown_deadline_buffer "
+                "(work_time=%s, shutdown_buffer=%s)",
+                work_time,
                 shutdown_buffer,
-                invocation_started,
-                deps.monotonic,
             )
-            if work_time <= timedelta(0):
-                raise RuntimeError(
-                    "Modal execution budget was exhausted before the worker started"
-                )
-            await _run_worker_until_timeout(worker, work_time.total_seconds())
-        finally:
-            await _run_shutdown_hooks(config)
+
+        invocation_connect_config: ClientConnectConfig = {
+            **config.client_connect_config
+        }
+        if "identity" not in invocation_connect_config:
+            get_function_call_id = (
+                deps.get_function_call_id or _default_get_function_call_id
+            )
+            invocation_connect_config["identity"] = build_modal_identity(
+                get_function_call_id(), deps.getenv(ENV_MODAL_TASK_ID) or ""
+            )
+
+        client = await deps.connect(**invocation_connect_config)
+        worker = deps.create_worker(client, **config.worker_config)
+
+        work_time = _work_time(
+            config,
+            shutdown_buffer,
+            invocation_started,
+            deps.monotonic,
+        )
+        if work_time <= timedelta(0):
+            raise RuntimeError(
+                "Modal execution budget was exhausted before the worker started"
+            )
+        await _run_worker_until_timeout(worker, work_time.total_seconds())
 
 
 @asynccontextmanager
@@ -290,19 +292,33 @@ async def _invocation_config_scope(
     configure: ConfigureCallback,
     config: ModalWorkerConfig,
 ) -> AsyncGenerator[ModalWorkerConfig, None]:
-    """Run configure setup and bracket any async teardown around the worker."""
-    if inspect.isasyncgenfunction(configure):
-        cm: Any = asynccontextmanager(configure)(config)
-    else:
-        result = configure(config)
-        if inspect.isawaitable(result):
-            await result
-        cm = result if result is not None and hasattr(result, "__aenter__") else None
-
-    if cm is not None:
-        async with cm:
-            _validate_task_queue(config)
+    """Run configure setup, then shutdown hooks and teardown after the worker."""
+    async with AsyncExitStack() as teardown:
+        try:
+            cm = await _run_configure(configure, config)
+            if cm is not None:
+                await teardown.enter_async_context(cm)
             yield config
-    else:
-        _validate_task_queue(config)
-        yield config
+        finally:
+            # Also runs on setup failure; always before async-generator teardown.
+            await _run_shutdown_hooks(config)
+
+
+async def _run_configure(
+    configure: ConfigureCallback,
+    config: ModalWorkerConfig,
+) -> AbstractAsyncContextManager[None] | None:
+    """Call configure; return a context manager to enter for its setup and teardown."""
+    if inspect.isasyncgenfunction(configure):
+        # Wrap the bare async generator so it drives like a context manager: setup on
+        # enter, teardown on exit.
+        return asynccontextmanager(configure)(config)
+    result = configure(config)
+    if inspect.isawaitable(result):
+        await result
+    if inspect.isasyncgen(result):
+        # A callable that returns an async generator (e.g. an object whose
+        # __call__ is an async generator function) drives like the bare form.
+        return asynccontextmanager(lambda: result)()
+    # A @asynccontextmanager-decorated callback returns the context manager directly.
+    return result if isinstance(result, AbstractAsyncContextManager) else None

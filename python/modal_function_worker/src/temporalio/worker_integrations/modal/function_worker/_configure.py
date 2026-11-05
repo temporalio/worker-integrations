@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import asyncio
+import inspect
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
@@ -56,7 +56,7 @@ async def _run_shutdown_hooks(  # type: ignore[reportUnusedFunction]
     for fn in config.shutdown_hooks:
         try:
             result = fn()
-            if asyncio.iscoroutine(result):
+            if inspect.isawaitable(result):
                 await result
         except Exception as err:
             logger.error("shutdown hook error: %s", err)
