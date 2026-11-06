@@ -1401,7 +1401,7 @@ wheels = [
 ]
 
 [[package]]
-name = "temporalio-worker-integrations-modal-function-worker"
+name = "temporalio-worker-integrations-modal-function"
 version = "0.0.0"
 source = { editable = "." }
 dependencies = [

@@ -1,4 +1,4 @@
-"""Tests for temporalio.worker_integrations.modal.function_worker."""
+"""Tests for temporalio.worker_integrations.modal.function."""
 
 from __future__ import annotations
 
@@ -16,11 +16,11 @@ import pytest
 from temporalio.common import WorkerDeploymentVersion
 from temporalio.envconfig import ClientConfigProfile
 from temporalio.worker import WorkerConfig
-from temporalio.worker_integrations.modal.function_worker._configure import (
+from temporalio.worker_integrations.modal.function._configure import (
     ModalWorkerConfig,
     _run_shutdown_hooks,
 )
-from temporalio.worker_integrations.modal.function_worker._defaults import (
+from temporalio.worker_integrations.modal.function._defaults import (
     _FUNCTION_TIMEOUT_HEADROOM,
     DEFAULT_MAX_CACHED_WORKFLOWS,
     DEFAULT_MAX_CONCURRENT_ACTIVITIES,
@@ -31,7 +31,7 @@ from temporalio.worker_integrations.modal.function_worker._defaults import (
     build_modal_identity,
     modal_default_config_file_path,
 )
-from temporalio.worker_integrations.modal.function_worker._run_worker import (
+from temporalio.worker_integrations.modal.function._run_worker import (
     _run_worker_internal,
     _run_worker_until_timeout,
     _WorkerDeps,
@@ -436,7 +436,7 @@ class TestRunWorkerInternal:
             captured_config.append(config)
 
         with patch(
-            "temporalio.worker_integrations.modal.function_worker._run_worker.asyncio.wait_for",
+            "temporalio.worker_integrations.modal.function._run_worker.asyncio.wait_for",
             fake_wait_for,
         ):
             await _run_worker_internal(
@@ -478,7 +478,7 @@ class TestRunWorkerInternal:
             config.shutdown_deadline_buffer = timedelta(seconds=7)
 
         with patch(
-            "temporalio.worker_integrations.modal.function_worker._run_worker.logger"
+            "temporalio.worker_integrations.modal.function._run_worker.logger"
         ) as mock_logger:
             await _run_worker_internal(
                 TEST_VERSION, configure, TEST_MODAL_FUNCTION_TIMEOUT, deps
@@ -503,7 +503,7 @@ class TestRunWorkerInternal:
             config.shutdown_deadline_buffer = timedelta(seconds=7)
 
         with patch(
-            "temporalio.worker_integrations.modal.function_worker._run_worker.asyncio.wait_for",
+            "temporalio.worker_integrations.modal.function._run_worker.asyncio.wait_for",
             fake_wait_for,
         ):
             await _run_worker_internal(

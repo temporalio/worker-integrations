@@ -1,7 +1,7 @@
 # Temporal worker integration for Modal Functions
 
-Published as [`temporalio-worker-integrations-modal-function-worker`](https://pypi.org/project/temporalio-worker-integrations-modal-function-worker/) and imported as
-`temporalio.worker_integrations.modal.function_worker`.
+Published as [`temporalio-worker-integrations-modal-function`](https://pypi.org/project/temporalio-worker-integrations-modal-function/) and imported as
+`temporalio.worker_integrations.modal.function`.
 
 Run a Temporal Worker for the lifetime of one
 [Modal Function](https://modal.com/docs/guide/functions) invocation. The
@@ -12,7 +12,7 @@ Function timeout.
 ## Install
 
 ```bash
-uv add temporalio-worker-integrations-modal-function-worker
+uv add temporalio-worker-integrations-modal-function
 ```
 
 This also installs `temporalio`, the Temporal Python SDK, and `modal`, Modal's Python SDK, if they
@@ -65,7 +65,7 @@ from datetime import timedelta
 import modal
 
 from temporalio.common import WorkerDeploymentVersion
-from temporalio.worker_integrations.modal.function_worker import ModalWorkerConfig, run_worker
+from temporalio.worker_integrations.modal.function import ModalWorkerConfig, run_worker
 
 from activities import greet
 from workflows import GreetingWorkflow
@@ -78,7 +78,7 @@ VERSION = WorkerDeploymentVersion(
 
 image = (
     modal.Image.debian_slim()
-    .pip_install("temporalio-worker-integrations-modal-function-worker")
+    .pip_install("temporalio-worker-integrations-modal-function")
     .add_local_python_source("activities", "workflows")
 )
 app = modal.App("temporal-worker", image=image)

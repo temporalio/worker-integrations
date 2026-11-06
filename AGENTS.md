@@ -90,6 +90,10 @@ through that module's `IntegrationMeta`, which validates the schema; never index
   and `_` replaced by `-`. For example, `temporalio.worker_integrations.aws.lambda_worker` lives in
   `python/aws_lambda_worker/` and is published as
   `temporalio-worker-integrations-aws-lambda-worker`.
+- **Root API naming:** below `temporalio.worker_integrations`, name a package after its vendor and
+  the compute product it runs on, e.g. `modal.function` or `gcp.cloud_run`. Don't add a `worker`
+  suffix, since the namespace already says it, except where the product name is a Python keyword
+  and can't be imported: `aws.lambda_worker`.
 - **Layout:** the package folder contains `pyproject.toml`, `uv.lock`, `integration.toml`,
   `Makefile`, `README.md`, `LICENSE`, `tests/`, and the root API under `src/` as a directory path
   (e.g. `src/temporalio/worker_integrations/aws/lambda_worker/`).
