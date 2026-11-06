@@ -23,11 +23,11 @@ from temporalio.client import ClientConnectConfig
 from temporalio.common import WorkerDeploymentVersion
 from temporalio.envconfig import ClientConfigProfile
 from temporalio.worker import WorkerConfig, WorkerDeploymentConfig
-from temporalio.worker_integrations.modal.function_worker._configure import (
+from temporalio.worker_integrations.modal.function._configure import (
     ModalWorkerConfig,
     _run_shutdown_hooks,
 )
-from temporalio.worker_integrations.modal.function_worker._defaults import (
+from temporalio.worker_integrations.modal.function._defaults import (
     _FUNCTION_TIMEOUT_HEADROOM,
     DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT,
     DEFAULT_SHUTDOWN_HOOK_BUFFER,

@@ -1,5 +1,5 @@
 [project]
-name = "temporalio-worker-integrations-modal-function-worker"
+name = "temporalio-worker-integrations-modal-function"
 version = "0.0.0"  # Development placeholder; release tags supply the published version.
 description = "Temporal worker integration for Modal Functions"
 authors = [{ name = "Temporal Technologies Inc", email = "compute-rnd-team@temporal.io" }]
@@ -24,7 +24,7 @@ dependencies = [
 [project.optional-dependencies]
 
 [project.urls]
-Homepage = "https://github.com/temporalio/worker-integrations/tree/main/python/modal_function_worker"
+Homepage = "https://github.com/temporalio/worker-integrations/tree/main/python/modal_function"
 Repository = "https://github.com/temporalio/worker-integrations"
 
 [build-system]
@@ -35,7 +35,7 @@ build-backend = "uv_build"
 # The folders above this module under src/ must NOT contain __init__.py: the SDK wheel owns
 # temporalio, and the levels below it are namespace packages shared by every package in this
 # repository.
-module-name = "temporalio.worker_integrations.modal.function_worker"
+module-name = "temporalio.worker_integrations.modal.function"
 
 [dependency-groups]
 dev = [
