@@ -36,13 +36,34 @@ def test_python_namespace_levels_must_not_have_init(repo: Path, level: str) -> N
      "root-api must be a snake_case module under temporalio.worker_integrations"),
     ("temporalio.worker_integrations.aws.lambda_worker", "temporalio.worker_integrations.aws.lambda",
      "the folder for root-api 'temporalio.worker_integrations.aws.lambda' must be python/aws_lambda"),
-    ('"temporalio-worker-integrations-aws-lambda-worker"', '"temporalio-aws-lambda-worker"',
-     "published-name must be 'temporalio-worker-integrations-aws-lambda-worker'"),
 ])
-def test_python_names_must_derive_from_root_api(repo: Path, old: str, new: str, message: str) -> None:
+def test_python_folder_must_derive_from_root_api(repo: Path, old: str, new: str, message: str) -> None:
     d = make_python_package(repo)
     replace_in_file(d / "integration.toml", old, new)
     assert any(message in v for v in run_checker(repo))
+
+
+def test_python_published_name_can_be_anything_valid(repo: Path) -> None:
+    d = make_python_package(repo)
+    for file in ("integration.toml", "pyproject.toml", "Makefile"):
+        replace_in_file(d / file, "temporalio-aws-lambda-worker", "temporalio-lambda")
+    assert run_checker(repo) == []
+
+
+@pytest.mark.parametrize("published_name", ["aws-lambda-worker", "temporalio-AWS-lambda", "temporalio-aws_lambda"])
+def test_python_published_name_must_be_canonical_with_prefix(repo: Path, published_name: str) -> None:
+    d = make_python_package(repo)
+    for file in ("integration.toml", "pyproject.toml", "Makefile"):
+        replace_in_file(d / file, "temporalio-aws-lambda-worker", published_name)
+    assert any("published-name must start with 'temporalio-'" in v for v in run_checker(repo))
+
+
+def test_python_published_names_must_be_unique(repo: Path) -> None:
+    make_python_package(repo)
+    d = make_python_package(repo, "temporalio.worker_integrations.otlp")
+    for file in ("integration.toml", "pyproject.toml", "Makefile"):
+        replace_in_file(d / file, "temporalio-otlp", "temporalio-aws-lambda-worker")
+    assert "python/otlp/integration.toml: published-name 'temporalio-aws-lambda-worker' is already used by python/aws_lambda_worker" in run_checker(repo)
 
 
 @pytest.mark.parametrize("module", [

@@ -8,6 +8,7 @@ Checks (see AGENTS.md):
   * in flat-layout languages, every folder directly under the language root is a package or
     starts with `_` / `.`
   * every package has a valid integration.toml
+  * no two packages of the same language share a published name
   * every package's LICENSE is a regular file byte-identical to the root LICENSE; no CHANGELOG
   * language-specific checks, for languages with a module in scripts/lib/languages/
 """
@@ -118,10 +119,22 @@ class Checker:
             tooled = TOOLED_LANGUAGES.get(language)
             if tooled:
                 tooled.check_root(self)
+
+            all_published_packages: dict[str, str] = {} # published-name -> path
             for package in discovered[language]:
                 meta = self.check_package(package)
                 if tooled:
                     tooled.check_package(self, package, meta)
+                if meta is None:
+                    continue
+
+                # Published names aren't necessarily derived from anything unique, so check that no two
+                # packages of the same language share a published name.
+                other = all_published_packages.get(meta.published_name)
+                if other is not None:
+                    self.fail(f"{package.rel}/integration.toml: published-name {meta.published_name!r} is already used by {other}")
+                else:
+                    all_published_packages[meta.published_name] = package.rel
         return self.violations
 
 

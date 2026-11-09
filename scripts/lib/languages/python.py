@@ -3,7 +3,9 @@
 Checks (see AGENTS.md, "Python conventions"):
   * python/_shared does not contain Python source or stubs (only configuration, make logic, etc.)
   * required files (including the root-api package's __init__.py and py.typed) exist; root-api is
-    under `temporalio.worker_integrations`, and the folder and published name derive from it
+    under `temporalio.worker_integrations`, and the folder derives from it
+  * published-name is a canonical PyPI name starting with `temporalio-` (it defaults to one derived
+    from the folder, but can be anything that fits)
   * no __init__.py in the shared namespace levels above the root-api package
   * every [smoke] imports entry in integration.toml is a submodule of root-api
   * the Makefile is exactly the two-line stub that includes python/_shared/python.mk
@@ -34,6 +36,10 @@ from lib.languages._base import CheckContext, Language
 from lib.release_version import ReleaseVersion
 
 PROJECT_NAMESPACE = "temporalio.worker_integrations"
+PUBLISHED_NAME_PREFIX = "temporalio-"
+# A published name as PyPI normalizes it (PEP 503), so that it matches what PyPI shows: lowercase
+# letters and digits, with single `-` separators.
+PUBLISHED_NAME_RE = re.compile(rf"{re.escape(PUBLISHED_NAME_PREFIX)}[a-z0-9]+(-[a-z0-9]+)*")
 PYTHON_MODULE_RE = re.compile(r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$")
 # Like PYTHON_MODULE_RE, but segments may also be private (start with `_`).
 PYTHON_SUBMODULE_RE = re.compile(r"^[a-z_][a-z0-9_]*(\.[a-z_][a-z0-9_]*)*$")
@@ -60,51 +66,63 @@ RELEASE_VERSION_RE = re.compile(
 PRE_RELEASE_PHASE_NAMES = {"a": "alpha", "b": "beta", "rc": "rc"}
 
 
-def names(root_api: str) -> tuple[str, str] | None:
-    """(folder, published name) for a root API, or None if it isn't a module under PROJECT_NAMESPACE.
+def folder_for(root_api: str) -> str | None:
+    """The folder for a root API, or None if it isn't a module under PROJECT_NAMESPACE.
 
-    The folder is the root API below the namespace with `.` -> `_`; the published name is the whole
-    root API with `.` and `_` -> `-`.
+    The folder is the root API below the namespace with `.` -> `_`.
     """
     prefix = f"{PROJECT_NAMESPACE}."
     if not root_api.startswith(prefix) or not PYTHON_MODULE_RE.match(root_api.removeprefix(prefix)):
         return None
-    folder = root_api.removeprefix(prefix).replace(".", "_")
-    return folder, root_api.replace(".", "-").replace("_", "-")
+    return root_api.removeprefix(prefix).replace(".", "_")
 
 
-def _requested_names(root_api: str) -> tuple[str, str]:
-    derived = names(root_api)
-    if derived is None:
+def _requested_folder(root_api: str) -> str:
+    folder = folder_for(root_api)
+    if folder is None:
         raise ValueError(
             f"Python root API must be a snake_case module under {PROJECT_NAMESPACE} "
             f"(e.g. {PROJECT_NAMESPACE}.aws.lambda_worker), got {root_api!r}"
         )
-    return derived
+    return folder
 
 
 class Python(Language):
     name = "python"
     name_help = f"full root API, e.g. {PROJECT_NAMESPACE}.aws.lambda_worker"
     next_steps = """\
-  1. Add the package's dependencies to pyproject.toml (declare exactly what it imports), and set
+  1. Confirm the published name, {published_name} (published-name in integration.toml):
+     - If you want a different name, delete python/{folder} and re-run new_package.py with
+       --python-published-name.
+     - Check that https://pypi.org/project/{published_name}/ doesn't exist, unless this package is
+       meant to continue that existing project.
+  2. Add the package's dependencies to pyproject.toml (declare exactly what it imports), and set
      the real temporalio floor there and in README.md's Compatibility section.
-  2. cd python/{folder} && make sync   # creates uv.lock; commit it
-  3. make lint && make test
-  4. Before the package's first release, ask a PyPI organization admin to add two pending trusted
-     publishers for its published name (in integration.toml), each with repository
-     temporalio/worker-integrations and workflow release-python.yml:
+  3. cd python/{folder} && make sync   # creates uv.lock; commit it
+  4. make lint && make test
+  5. Before the package's first release, ask a PyPI organization admin to add two pending trusted
+     publishers for {published_name}, each with repository temporalio/worker-integrations and
+     workflow release-python.yml:
        - on pypi.org, with environment pypi
        - on test.pypi.org, with environment testpypi"""
 
     # -- scaffolding -----------------------------------------------------------------------------
     def package_folder(self, requested: str) -> str:
-        return _requested_names(requested)[0]
+        return _requested_folder(requested)
 
-    def substitutions(self, requested: str, description: str, maturity: str) -> dict[str, str]:
-        folder, published_name = _requested_names(requested)
+    def default_published_name(self, requested: str) -> str:
+        return PUBLISHED_NAME_PREFIX + _requested_folder(requested).replace("_", "-")
+
+    def validate_published_name(self, published_name: str) -> None:
+        if not PUBLISHED_NAME_RE.fullmatch(published_name):
+            raise ValueError(
+                f"published-name must start with {PUBLISHED_NAME_PREFIX!r} and be in the form PyPI shows it "
+                f"(lowercase letters and digits separated by single '-'), got {published_name!r}"
+            )
+
+    def substitutions(self, requested: str, published_name: str, description: str, maturity: str) -> dict[str, str]:
         return {
-            "__NAME__": folder,
+            "__NAME__": _requested_folder(requested),
             "__PUBLISHED_NAME__": published_name,
             "__MODULE__": requested,
             "__MODULE_PATH__": requested.replace(".", "/"),
@@ -133,18 +151,19 @@ class Python(Language):
         if meta is None:
             return  # integration.toml problems are already reported
 
-        # The root API, folder path, and published name should all be consistent
+        # The folder path derives from the root API; the published name is free within PyPI's rules
         root_api = meta.root_api
-        derived = names(root_api)
-        if derived is None:
+        folder = folder_for(root_api)
+        if folder is None:
             ctx.fail(f"{rel}/integration.toml: root-api must be a snake_case module under {PROJECT_NAMESPACE} (got {root_api!r})")
             return
-        folder, published_name = derived
         if package.name != folder:
             ctx.fail(f"{rel}: the folder for root-api {root_api!r} must be python/{folder}")
             return
-        if meta.published_name != published_name:
-            ctx.fail(f"{rel}/integration.toml: published-name must be {published_name!r} (got {meta.published_name!r})")
+        try:
+            self.validate_published_name(meta.published_name)
+        except ValueError as exc:
+            ctx.fail(f"{rel}/integration.toml: {exc}")
 
         # Smoke test imports must be submodules of the root API
         for module in meta.smoke_imports:
@@ -168,7 +187,7 @@ class Python(Language):
                 )
 
         makefile = d / "Makefile"
-        expected_makefile = f"DIST := {published_name}\ninclude ../_shared/python.mk\n"
+        expected_makefile = f"DIST := {meta.published_name}\ninclude ../_shared/python.mk\n"
         if makefile.is_file() and makefile.read_text() != expected_makefile:
             ctx.fail(f"{rel}/Makefile: must be exactly:\n{expected_makefile.rstrip()}")
 

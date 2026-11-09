@@ -27,7 +27,7 @@ def test_template_build_passes(built: Path, capsys: pytest.CaptureFixture[str]) 
     out = capsys.readouterr().out
     assert "OK" in out
     # The resolved versions are logged for each install.
-    assert re.search(r"^temporalio-worker-integrations-aws-lambda-worker +0\.0\.0$", out, re.MULTILINE)
+    assert re.search(r"^temporalio-aws-lambda-worker +0\.0\.0$", out, re.MULTILINE)
     assert re.search(r"^temporalio +\d", out, re.MULTILINE)
 
 
@@ -72,7 +72,7 @@ def test_provenance_guard_runs(built: Path, tmp_path: Path) -> None:
         "    raise ProvenanceError(f'{dist_name} {pkg_rel}')\n"
     )
     problems = smoke.smoke(d, d / "dist")
-    message = "provenance guard failed: temporalio-worker-integrations-aws-lambda-worker temporalio/worker_integrations/aws/lambda_worker"
+    message = "provenance guard failed: temporalio-aws-lambda-worker temporalio/worker_integrations/aws/lambda_worker"
     assert len(problems) == 2
     assert problems[0].endswith(f".whl base: {message}")
     assert problems[1].endswith(f".tar.gz base: {message}")
@@ -82,7 +82,7 @@ def test_no_distributions(built: Path, tmp_path: Path) -> None:
     assert smoke.smoke(built, tmp_path) == [f"no wheel or sdist in {tmp_path}"]
 
 
-NAME = "temporalio-worker-integrations-aws-lambda-worker"
+NAME = "temporalio-aws-lambda-worker"
 WHEEL = (f"{NAME.replace('-', '_')}-0.1.0-py3-none-any.whl", "https://files.example/wheel")
 SDIST = (f"{NAME.replace('-', '_')}-0.1.0.tar.gz", "https://files.example/sdist")
 
