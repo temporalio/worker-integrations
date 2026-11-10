@@ -118,6 +118,6 @@ def test_main_rejects_an_unorderable_published_version(
     publish(monkeypatch, ["0.0.1", "0.0.1.post1"])
     assert run(repo, "python/aws_lambda_worker/v0.1.0") == 1
     assert (
-        "FAIL: temporalio-worker-integrations-aws-lambda-worker has a published version this tooling can't order: '0.0.1.post1'"
+        "FAIL: temporalio-aws-lambda-worker has a published version this tooling can't order: '0.0.1.post1'"
         in capsys.readouterr().out
     )

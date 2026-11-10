@@ -85,11 +85,14 @@ through that module's `IntegrationMeta`, which validates the schema; never index
 ## Python conventions
 
 - **Names:** every package's root API (`root-api` in `integration.toml`) is a module under
-  `temporalio.worker_integrations`, and its other names derive from it. The folder is the rest of
-  the root API with `.` replaced by `_`, and the published name is the whole root API with `.`
-  and `_` replaced by `-`. For example, `temporalio.worker_integrations.aws.lambda_worker` lives in
-  `python/aws_lambda_worker/` and is published as
-  `temporalio-worker-integrations-aws-lambda-worker`.
+  `temporalio.worker_integrations`. The folder is the rest of the root API with `.` replaced by
+  `_`. The published name defaults to `temporalio-` followed by the folder with `_` replaced by
+  `-`, so `temporalio.worker_integrations.aws.lambda_worker` lives in `python/aws_lambda_worker/`
+  and is published as `temporalio-aws-lambda-worker`. A package may choose a different published
+  name, as long as it starts with `temporalio-`, is in the normalized form PyPI shows (lowercase
+  letters and digits separated by single `-`), and isn't used by another package in this
+  repository. Nothing checks names published from other repositories, so before a package's first
+  release, check that its name isn't already on PyPI.
 - **Root API naming:** below `temporalio.worker_integrations`, name a package after its vendor and
   the compute product it runs on, e.g. `modal.function` or `gcp.cloud_run`. Don't add a `worker`
   suffix, since the namespace already says it, except where the product name is a Python keyword
@@ -146,9 +149,10 @@ uv run --project scripts --locked python scripts/new_package.py \
 `scripts/new_package.py` is shared by every language that has a template. Each language option
 takes the name that identifies a package in that language, since naming styles differ by
 language; for Python, that's the full root API. This one creates `python/aws_lambda_worker/` from
-`python/_template/`, deriving the folder and published name from the root API (see **Names**
-above) and the maturity classifier from `--maturity`, and copies the root `LICENSE`. It then
-prints the remaining steps: add dependencies, set the real `temporalio` floor, run `make sync`
+`python/_template/`, deriving the folder and default published name from the root API (see
+**Names** above) and the maturity classifier from `--maturity`, and copies the root `LICENSE`.
+Pass `--python-published-name` to use a different published name. It then prints the remaining
+steps: confirm the published name, add dependencies, set the real `temporalio` floor, run `make sync`
 (which creates `uv.lock`; commit it), `make lint` and `make test`. Check the result with
 `uv run --project scripts --locked python scripts/ci/check_conventions.py`.
 

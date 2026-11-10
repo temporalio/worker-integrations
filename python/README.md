@@ -13,9 +13,10 @@ Each non-underscored subdirectory is a separate Python package. All packages def
 under `temporalio.worker_integrations`, from which various other identifiers are derived.
 
 For example, a package that defines the root path of `temporalio.worker_integrations.aws.lambda_worker`
-will live in the `aws_lambda_worker` subdirectory, be published as
-`temporalio-worker-integrations-aws-lambda-worker`, and have a source tree mirroring the import path,
-`src/temporalio/worker_integrations/aws/lambda_worker`.
+will live in the `aws_lambda_worker` subdirectory, be published as `temporalio-aws-lambda-worker` by
+default, and have a source tree mirroring the import path,
+`src/temporalio/worker_integrations/aws/lambda_worker`. The default published name can be overridden
+as desired, as long as it starts with `temporalio-` and doesn't conflict with existing packages.
 
 The special `_shared/` subdirectory defines shared config across all Python packages, which notably
 includes `make` target definitions. The `_template/` directory contains a template package structure,
@@ -53,7 +54,9 @@ uv run --project scripts --locked python scripts/new_package.py \
     --maturity public-preview
 ```
 
-This creates the package folder from `_template/` and prints suggested next steps.
-Loosely, this entails adding dependencies, setting the supported `temporalio` SDK versions,
+This creates the package folder from `_template/` and prints suggested next steps. To publish it
+under a name other than the default, add `--python-published-name <name>`.
+
+The next steps loosely entail adding dependencies, setting the supported `temporalio` SDK versions,
 and updating the lock file. Before the package's first release, it also needs trusted publishers
 on PyPI and TestPyPI, which a PyPI organization admin sets up; the printed steps list the details.

@@ -3,7 +3,7 @@
 Schema:
 
     [package]
-    published-name = "temporalio-worker-integrations-aws-lambda-worker"
+    published-name = "temporalio-aws-lambda-worker"
     root-api = "temporalio.worker_integrations.aws.lambda_worker"   # root import path / namespace
     maturity = "public-preview"               # pre-release | public-preview | generally-available
 

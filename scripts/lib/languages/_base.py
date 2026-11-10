@@ -30,8 +30,8 @@ class Language(ABC):
     next_steps: ClassVar[str]
     """Printed after scaffolding a package with new_package.py.
 
-    The {folder} placeholder will be replaced with the language-relative folder path
-    of the newly scaffolded package when printed.
+    The {folder} and {published_name} placeholders will be replaced with the language-relative
+    folder path and the published name of the newly scaffolded package when printed.
     """
 
     # -- scaffolding (scripts/new_package.py) ----------------------------------------------------
@@ -43,13 +43,36 @@ class Language(ABC):
         """
 
     @abstractmethod
-    def substitutions(self, requested: str, description: str, maturity: str) -> dict[str, str]:
+    def default_published_name(self, requested: str) -> str:
+        """The published name for a name passed to new_package.py's --<name> option, unless overridden.
+
+        Raises ValueError if the name is invalid.
+        """
+
+    @abstractmethod
+    def validate_published_name(self, published_name: str) -> None:
+        """Raises ValueError, describing the problem, if a published name is invalid."""
+
+    def published_name(self, requested: str, override: str | None = None) -> str:
+        """The published name for a new package: `override` if given, else the default.
+
+        Raises ValueError if the name is invalid.
+        """
+        published_name = self.default_published_name(requested) if override is None else override
+        self.validate_published_name(published_name)
+        return published_name
+
+    @abstractmethod
+    def substitutions(self, requested: str, published_name: str, description: str, maturity: str) -> dict[str, str]:
         """Substitutions (placeholder -> value) to apply to template file contents and paths."""
 
-    def scaffold(self, root: Path, requested: str, description: str, maturity: str) -> list[Path]:
+    def scaffold(
+        self, root: Path, requested: str, published_name: str, description: str, maturity: str
+    ) -> list[Path]:
         """Create the package from <name>/_template. Returns the files written."""
         folder = self.package_folder(requested)
-        return render_template(root, self.name, folder, self.substitutions(requested, description, maturity))
+        substitutions = self.substitutions(requested, published_name, description, maturity)
+        return render_template(root, self.name, folder, substitutions)
 
     # -- conventions (scripts/ci/check_conventions.py) -------------------------------------------
     def check_root(self, ctx: CheckContext) -> None:
