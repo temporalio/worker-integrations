@@ -40,14 +40,14 @@ module-name = "temporalio.worker_integrations.modal.function"
 [dependency-groups]
 dev = [
   "pyright>=1.1.414,<2",
-  "basedpyright>=1.40.2,<2",
-  "mypy>=1.20.2,<2",
-  "ruff>=0.15.12,<0.16",
-  "pydocstyle>=6.3,<7",
+  "basedpyright~=1.40",
+  "mypy~=2.4",
+  "ruff~=0.17.2",
+  "pydocstyle~=6.3",
   "pytest~=9.0",
-  "pytest-asyncio>=0.21.2,<0.22",
+  "pytest-asyncio~=1.0",
   "pytest-timeout~=2.2",
-  "pytest-xdist>=3.6,<4",
+  "pytest-xdist~=3.6",
   "tomli>=2.0; python_version < '3.11'",
 ]
 
