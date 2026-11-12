@@ -70,16 +70,19 @@ def test_at_least_one_language_is_required(repo: Path) -> None:
 def test_published_name_can_be_overridden(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
     copy_python_support(repo)
     args = [
-        "--python", "temporalio.worker_integrations.modal.function", "--python-published-name", "temporalio-modal",
+        "--python", "temporalio.worker_integrations.modal.function",
+        "--python-published-name", "temporalio-modal-function-worker",
         "--description", "Modal worker", "--repo-root", str(repo),
     ]
     assert new_package.main(args) == 0
 
-    d = repo / "python" / "modal_function"
+    # The folder follows the published name, not the root API
+    d = repo / "python" / "modal_function_worker"
     meta = tomllib.loads((d / "integration.toml").read_text())["package"]
-    assert meta["published-name"] == "temporalio-modal"
+    assert meta["published-name"] == "temporalio-modal-function-worker"
     assert meta["root-api"] == "temporalio.worker_integrations.modal.function"
-    assert "https://pypi.org/project/temporalio-modal/" in capsys.readouterr().out
+    assert (d / "src/temporalio/worker_integrations/modal/function/__init__.py").is_file()
+    assert "https://pypi.org/project/temporalio-modal-function-worker/" in capsys.readouterr().out
     (d / "uv.lock").write_text("version = 1\n")
     assert check_conventions.Checker(repo).run() == []
 

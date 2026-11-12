@@ -36,10 +36,11 @@ class Language(ABC):
 
     # -- scaffolding (scripts/new_package.py) ----------------------------------------------------
     @abstractmethod
-    def package_folder(self, requested: str) -> str:
-        """The language-relative package folder for a name passed to new_package.py's --<name> option.
+    def package_folder(self, requested: str, published_name: str) -> str:
+        """The language-relative package folder for a new package.
 
-        Raises ValueError if the name is invalid.
+        `requested` is the name passed to new_package.py's --<name> option, and `published_name`
+        the package's valid published name. Raises ValueError if `requested` is invalid.
         """
 
     @abstractmethod
@@ -70,7 +71,7 @@ class Language(ABC):
         self, root: Path, requested: str, published_name: str, description: str, maturity: str
     ) -> list[Path]:
         """Create the package from <name>/_template. Returns the files written."""
-        folder = self.package_folder(requested)
+        folder = self.package_folder(requested, published_name)
         substitutions = self.substitutions(requested, published_name, description, maturity)
         return render_template(root, self.name, folder, substitutions)
 
