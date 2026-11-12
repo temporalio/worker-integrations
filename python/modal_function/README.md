@@ -1,5 +1,7 @@
 # Temporal worker integration for Modal Functions
 
+> ⚠️ **This package is currently at an experimental release stage.** ⚠️
+
 Published as [`temporalio-modal-function-worker`](https://pypi.org/project/temporalio-modal-function-worker/) and imported as
 `temporalio.worker_integrations.modal.function`.
 
