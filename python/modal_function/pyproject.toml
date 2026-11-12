@@ -1,5 +1,5 @@
 [project]
-name = "temporalio-worker-integrations-modal-function"
+name = "temporalio-modal-function-worker"
 version = "0.0.0"  # Development placeholder; release tags supply the published version.
 description = "Temporal worker integration for Modal Functions"
 authors = [{ name = "Temporal Technologies Inc", email = "compute-rnd-team@temporal.io" }]

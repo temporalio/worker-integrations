@@ -9,7 +9,7 @@
 # See AGENTS.md ("Python conventions") for why installs are non-editable and which tools run.
 
 ifndef DIST
-$(error DIST must be set to the package's distribution name (e.g. temporalio-worker-integrations-aws-lambda-worker) before including python.mk)
+$(error DIST must be set to the package's distribution name (e.g. temporalio-aws-lambda-worker) before including python.mk)
 endif
 
 # `temporalio` is a regular package owned by the SDK wheel, so an editable install of this
