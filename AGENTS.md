@@ -85,14 +85,17 @@ through that module's `IntegrationMeta`, which validates the schema; never index
 ## Python conventions
 
 - **Names:** every package's root API (`root-api` in `integration.toml`) is a module under
-  `temporalio.worker_integrations`. The folder is the rest of the root API with `.` replaced by
-  `_`. The published name defaults to `temporalio-` followed by the folder with `_` replaced by
-  `-`, so `temporalio.worker_integrations.aws.lambda_worker` lives in `python/aws_lambda_worker/`
-  and is published as `temporalio-aws-lambda-worker`. A package may choose a different published
-  name, as long as it starts with `temporalio-`, is in the normalized form PyPI shows (lowercase
-  letters and digits separated by single `-`), and isn't used by another package in this
-  repository. Nothing checks names published from other repositories, so before a package's first
-  release, check that its name isn't already on PyPI.
+  `temporalio.worker_integrations` that no other package in this repository uses. The published
+  name defaults to `temporalio-` followed by the rest of the root API with `.` and `_` replaced by
+  `-`, and the folder is the published name without `temporalio-`, with `-` replaced by `_`, so
+  the folder and release tags read like the name users install. For example,
+  `temporalio.worker_integrations.aws.lambda_worker` is published as
+  `temporalio-aws-lambda-worker` and lives in `python/aws_lambda_worker/`. A package may choose a
+  different published name, as long as it starts with `temporalio-`, is in the normalized form PyPI
+  shows (lowercase letters and digits separated by single `-`), and isn't used by another package
+  in this repository; its folder follows the name, e.g. `temporalio-modal-function-worker` lives in
+  `python/modal_function_worker/`. Nothing checks names published from other repositories, so
+  before a package's first release, check that its name isn't already on PyPI.
 - **Root API naming:** below `temporalio.worker_integrations`, name a package after its provider and
   the compute product it runs on, e.g. `modal.function` or `gcp.cloud_run`. Don't add a `worker`
   suffix, since the namespace already says it, except where the product name is a Python keyword
@@ -153,9 +156,10 @@ uv run --project scripts --locked python scripts/new_package.py \
 `scripts/new_package.py` is shared by every language that has a template. Each language option
 takes the name that identifies a package in that language, since naming styles differ by
 language; for Python, that's the full root API. This one creates `python/aws_lambda_worker/` from
-`python/_template/`, deriving the folder and default published name from the root API (see
-**Names** above) and the maturity classifier from `--maturity`, and copies the root `LICENSE`.
-Pass `--python-published-name` to use a different published name. It then prints the remaining
+`python/_template/`, deriving the default published name from the root API and the folder from the
+published name (see **Names** above), and the maturity classifier from `--maturity`, and copies the
+root `LICENSE`. Pass `--python-published-name` to use a different published name, which also
+changes the folder. It then prints the remaining
 steps: confirm the published name, add dependencies, set the real `temporalio` floor, run `make sync`
 (which creates `uv.lock`; commit it), `make lint` and `make test`. Check the result with
 `uv run --project scripts --locked python scripts/ci/check_conventions.py`.

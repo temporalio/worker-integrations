@@ -81,7 +81,8 @@ def make_python_package(
     """
     copy_python_support(root)
     scaffold(root, {"python": root_api}, f"Fake {root_api} integration", maturity)
-    d = root / "python" / TOOLED_LANGUAGES["python"].package_folder(root_api)
+    python = TOOLED_LANGUAGES["python"]
+    d = root / "python" / python.package_folder(root_api, python.published_name(root_api))
     (d / "uv.lock").write_text("version = 1\n")
     return d
 

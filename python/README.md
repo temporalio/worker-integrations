@@ -10,13 +10,16 @@ conventions checks in CI.
 ## Layout
 
 Each non-underscored subdirectory is a separate Python package. All packages define an import path
-under `temporalio.worker_integrations`, from which various other identifiers are derived.
+under `temporalio.worker_integrations`, and are published under a name starting with `temporalio-`.
+Each subdirectory is named after its package's published name.
 
 For example, a package that defines the root path of `temporalio.worker_integrations.aws.lambda_worker`
-will live in the `aws_lambda_worker` subdirectory, be published as `temporalio-aws-lambda-worker` by
-default, and have a source tree mirroring the import path,
+will be published as `temporalio-aws-lambda-worker` by default, live in the `aws_lambda_worker`
+subdirectory, and have a source tree mirroring the import path,
 `src/temporalio/worker_integrations/aws/lambda_worker`. The default published name can be overridden
-as desired, as long as it starts with `temporalio-` and doesn't conflict with existing packages.
+as desired, as long as it starts with `temporalio-` and doesn't conflict with existing packages; the
+subdirectory follows it. For example, `temporalio-modal-function-worker`, which defines
+`temporalio.worker_integrations.modal.function`, lives in `modal_function_worker`.
 
 The special `_shared/` subdirectory defines shared config across all Python packages, which notably
 includes `make` target definitions. The `_template/` directory contains a template package structure,

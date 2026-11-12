@@ -24,7 +24,7 @@ dependencies = [
 [project.optional-dependencies]
 
 [project.urls]
-Homepage = "https://github.com/temporalio/worker-integrations/tree/main/python/modal_function"
+Homepage = "https://github.com/temporalio/worker-integrations/tree/main/python/modal_function_worker"
 Repository = "https://github.com/temporalio/worker-integrations"
 
 [build-system]

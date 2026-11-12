@@ -8,7 +8,7 @@ Checks (see AGENTS.md):
   * in flat-layout languages, every folder directly under the language root is a package or
     starts with `_` / `.`
   * every package has a valid integration.toml
-  * no two packages of the same language share a published name
+  * no two packages of the same language share a published name or a root API
   * every package's LICENSE is a regular file byte-identical to the root LICENSE; no CHANGELOG
   * language-specific checks, for languages with a module in scripts/lib/languages/
 """
@@ -120,7 +120,8 @@ class Checker:
             if tooled:
                 tooled.check_root(self)
 
-            all_published_packages: dict[str, str] = {} # published-name -> path
+            # value -> path of the package that uses it, per integration.toml key
+            used: dict[str, dict[str, str]] = {"published-name": {}, "root-api": {}}
             for package in discovered[language]:
                 meta = self.check_package(package)
                 if tooled:
@@ -128,13 +129,13 @@ class Checker:
                 if meta is None:
                     continue
 
-                # Published names aren't necessarily derived from anything unique, so check that no two
-                # packages of the same language share a published name.
-                other = all_published_packages.get(meta.published_name)
-                if other is not None:
-                    self.fail(f"{package.rel}/integration.toml: published-name {meta.published_name!r} is already used by {other}")
-                else:
-                    all_published_packages[meta.published_name] = package.rel
+                # Published names and root APIs aren't necessarily derived from anything unique, so
+                # check that no two packages of the same language share one. Two packages with the
+                # same root API would overwrite each other's files when installed together.
+                for key, value in (("published-name", meta.published_name), ("root-api", meta.root_api)):
+                    other = used[key].setdefault(value, package.rel)
+                    if other != package.rel:
+                        self.fail(f"{package.rel}/integration.toml: {key} {value!r} is already used by {other}")
         return self.violations
 
 

@@ -31,22 +31,25 @@ def test_python_namespace_levels_must_not_have_init(repo: Path, level: str) -> N
     assert any(f"src/{level}/__init__.py must not exist" in v for v in run_checker(repo))
 
 
-@pytest.mark.parametrize("old,new,message", [
-    ("temporalio.worker_integrations.aws.lambda_worker", "temporalio.aws_lambda_worker",
-     "root-api must be a snake_case module under temporalio.worker_integrations"),
-    ("temporalio.worker_integrations.aws.lambda_worker", "temporalio.worker_integrations.aws.lambda",
-     "the folder for root-api 'temporalio.worker_integrations.aws.lambda' must be python/aws_lambda"),
-])
-def test_python_folder_must_derive_from_root_api(repo: Path, old: str, new: str, message: str) -> None:
+def test_python_root_api_must_be_under_namespace(repo: Path) -> None:
     d = make_python_package(repo)
-    replace_in_file(d / "integration.toml", old, new)
-    assert any(message in v for v in run_checker(repo))
+    replace_in_file(d / "integration.toml", "temporalio.worker_integrations.aws.lambda_worker", "temporalio.aws_lambda_worker")
+    assert any("root-api must be a snake_case module under temporalio.worker_integrations" in v for v in run_checker(repo))
+
+
+def test_python_folder_must_derive_from_published_name(repo: Path) -> None:
+    d = make_python_package(repo)
+    for file in ("integration.toml", "pyproject.toml", "Makefile"):
+        replace_in_file(d / file, "temporalio-aws-lambda-worker", "temporalio-lambda")
+    assert "python/aws_lambda_worker: the folder for published-name 'temporalio-lambda' must be python/lambda" in run_checker(repo)
 
 
 def test_python_published_name_can_be_anything_valid(repo: Path) -> None:
     d = make_python_package(repo)
     for file in ("integration.toml", "pyproject.toml", "Makefile"):
         replace_in_file(d / file, "temporalio-aws-lambda-worker", "temporalio-lambda")
+    replace_in_file(d / "pyproject.toml", "/python/aws_lambda_worker", "/python/lambda")
+    d.rename(d.parent / "lambda")
     assert run_checker(repo) == []
 
 
@@ -64,6 +67,19 @@ def test_python_published_names_must_be_unique(repo: Path) -> None:
     for file in ("integration.toml", "pyproject.toml", "Makefile"):
         replace_in_file(d / file, "temporalio-otlp", "temporalio-aws-lambda-worker")
     assert "python/otlp/integration.toml: published-name 'temporalio-aws-lambda-worker' is already used by python/aws_lambda_worker" in run_checker(repo)
+
+
+def test_python_root_apis_must_be_unique(repo: Path) -> None:
+    make_python_package(repo)
+    d = make_python_package(repo, "temporalio.worker_integrations.otlp")
+    root_api_dir = d / "src/temporalio/worker_integrations"
+    (root_api_dir / "aws").mkdir()
+    (root_api_dir / "otlp").rename(root_api_dir / "aws/lambda_worker")
+    for file in ("integration.toml", "pyproject.toml"):
+        replace_in_file(d / file, "temporalio.worker_integrations.otlp", "temporalio.worker_integrations.aws.lambda_worker")
+    assert run_checker(repo) == [
+        "python/otlp/integration.toml: root-api 'temporalio.worker_integrations.aws.lambda_worker' is already used by python/aws_lambda_worker"
+    ]
 
 
 @pytest.mark.parametrize("module", [

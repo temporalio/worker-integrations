@@ -8,11 +8,12 @@ Usage:
         [--python <root API> [--python-published-name <name>]]
 
 Each language option takes the name that identifies a package in that language, since naming
-styles differ by language; the package's folder derives from it, and so does its published name
-unless --<language>-published-name overrides it. Every requested name is validated before
-anything is written.
+styles differ by language; the package's published name derives from it unless
+--<language>-published-name overrides it, and its folder derives from the published name. Every
+requested name is validated before anything is written.
   - Python: the full root API; --python temporalio.worker_integrations.aws.lambda_worker
-    creates python/aws_lambda_worker published as temporalio-aws-lambda-worker.
+    creates python/aws_lambda_worker published as temporalio-aws-lambda-worker, and adding
+    --python-published-name temporalio-aws-lambda creates python/aws_lambda instead.
 
 At least one language option is required. Multiple language options may be passed at once to
 create analogous packages across multiple languages simultaneously; this has the same effect
@@ -58,10 +59,10 @@ def scaffold(
     published_names: dict[str, str] = {}
     for language, name in names.items():
         spec = TOOLED_LANGUAGES[language]
-        folder = spec.package_folder(name)
+        published_names[language] = spec.published_name(name, published_name_overrides.get(language))
+        folder = spec.package_folder(name, published_names[language])
         if (root / language / folder).exists():
             raise ValueError(f"{language}/{folder} already exists")
-        published_names[language] = spec.published_name(name, published_name_overrides.get(language))
     written: list[Path] = []
     for language, name in names.items():
         written += TOOLED_LANGUAGES[language].scaffold(root, name, published_names[language], description, maturity)
@@ -94,8 +95,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"wrote   {path.relative_to(root).as_posix()}")
     for language, name in names.items():
         spec = TOOLED_LANGUAGES[language]
-        folder = spec.package_folder(name)
         published_name = spec.published_name(name, published_name_overrides.get(language))
+        folder = spec.package_folder(name, published_name)
         next_steps = spec.next_steps.format(folder=folder, published_name=published_name)
         print(f"\nNext steps for {language}/{folder}:\n{next_steps}")
     print("\nThen open the PR. CI discovers new packages automatically; no workflow edits are needed.")

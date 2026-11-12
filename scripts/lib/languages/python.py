@@ -3,9 +3,9 @@
 Checks (see AGENTS.md, "Python conventions"):
   * python/_shared does not contain Python source or stubs (only configuration, make logic, etc.)
   * required files (including the root-api package's __init__.py and py.typed) exist; root-api is
-    under `temporalio.worker_integrations`, and the folder derives from it
+    under `temporalio.worker_integrations`
   * published-name is a canonical PyPI name starting with `temporalio-` (it defaults to one derived
-    from the folder, but can be anything that fits)
+    from root-api, but can be anything that fits), and the folder derives from it
   * no __init__.py in the shared namespace levels above the root-api package
   * every [smoke] imports entry in integration.toml is a submodule of root-api
   * the Makefile is exactly the two-line stub that includes python/_shared/python.mk
@@ -66,25 +66,30 @@ RELEASE_VERSION_RE = re.compile(
 PRE_RELEASE_PHASE_NAMES = {"a": "alpha", "b": "beta", "rc": "rc"}
 
 
-def folder_for(root_api: str) -> str | None:
-    """The folder for a root API, or None if it isn't a module under PROJECT_NAMESPACE.
-
-    The folder is the root API below the namespace with `.` -> `_`.
-    """
+def module_below_namespace(root_api: str) -> str | None:
+    """The root API below PROJECT_NAMESPACE (e.g. `aws.lambda_worker`), or None if it isn't under it."""
     prefix = f"{PROJECT_NAMESPACE}."
     if not root_api.startswith(prefix) or not PYTHON_MODULE_RE.match(root_api.removeprefix(prefix)):
         return None
-    return root_api.removeprefix(prefix).replace(".", "_")
+    return root_api.removeprefix(prefix)
 
 
-def _requested_folder(root_api: str) -> str:
-    folder = folder_for(root_api)
-    if folder is None:
+def folder_for(published_name: str) -> str:
+    """The folder for a valid published name: the name without its prefix, with `-` -> `_`.
+
+    The folder, and so the release tags, then read like the name users install.
+    """
+    return published_name.removeprefix(PUBLISHED_NAME_PREFIX).replace("-", "_")
+
+
+def _requested_module(root_api: str) -> str:
+    module = module_below_namespace(root_api)
+    if module is None:
         raise ValueError(
             f"Python root API must be a snake_case module under {PROJECT_NAMESPACE} "
             f"(e.g. {PROJECT_NAMESPACE}.aws.lambda_worker), got {root_api!r}"
         )
-    return folder
+    return module
 
 
 class Python(Language):
@@ -107,11 +112,12 @@ class Python(Language):
        - on test.pypi.org, with environment testpypi"""
 
     # -- scaffolding -----------------------------------------------------------------------------
-    def package_folder(self, requested: str) -> str:
-        return _requested_folder(requested)
+    def package_folder(self, requested: str, published_name: str) -> str:
+        _requested_module(requested)
+        return folder_for(published_name)
 
     def default_published_name(self, requested: str) -> str:
-        return PUBLISHED_NAME_PREFIX + _requested_folder(requested).replace("_", "-")
+        return PUBLISHED_NAME_PREFIX + _requested_module(requested).replace(".", "-").replace("_", "-")
 
     def validate_published_name(self, published_name: str) -> None:
         if not PUBLISHED_NAME_RE.fullmatch(published_name):
@@ -122,7 +128,7 @@ class Python(Language):
 
     def substitutions(self, requested: str, published_name: str, description: str, maturity: str) -> dict[str, str]:
         return {
-            "__NAME__": _requested_folder(requested),
+            "__NAME__": folder_for(published_name),
             "__PUBLISHED_NAME__": published_name,
             "__MODULE__": requested,
             "__MODULE_PATH__": requested.replace(".", "/"),
@@ -151,19 +157,21 @@ class Python(Language):
         if meta is None:
             return  # integration.toml problems are already reported
 
-        # The folder path derives from the root API; the published name is free within PyPI's rules
+        # The root API and published name are free within their rules; the folder path derives from
+        # the published name
         root_api = meta.root_api
-        folder = folder_for(root_api)
-        if folder is None:
+        if module_below_namespace(root_api) is None:
             ctx.fail(f"{rel}/integration.toml: root-api must be a snake_case module under {PROJECT_NAMESPACE} (got {root_api!r})")
-            return
-        if package.name != folder:
-            ctx.fail(f"{rel}: the folder for root-api {root_api!r} must be python/{folder}")
             return
         try:
             self.validate_published_name(meta.published_name)
         except ValueError as exc:
             ctx.fail(f"{rel}/integration.toml: {exc}")
+            return
+        folder = folder_for(meta.published_name)
+        if package.name != folder:
+            ctx.fail(f"{rel}: the folder for published-name {meta.published_name!r} must be python/{folder}")
+            return
 
         # Smoke test imports must be submodules of the root API
         for module in meta.smoke_imports:
