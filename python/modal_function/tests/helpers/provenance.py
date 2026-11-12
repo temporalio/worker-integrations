@@ -53,7 +53,7 @@ def check_provenance(
     """Verify the installed distribution and return the installed package directory.
 
     Args:
-        dist_name: Distribution name, e.g. ``temporalio-worker-integrations-aws-lambda-worker``.
+        dist_name: Distribution name, e.g. ``temporalio-aws-lambda-worker``.
         pkg_rel: Root API as a relative path, e.g. ``temporalio/worker_integrations/aws/lambda_worker``.
 
     Raises:
