@@ -19,7 +19,7 @@ dev = ["pytest>=9,<10", "pyyaml>=6,<7"]
 
 [tool.uv]
 package = false
-required-version = ">=0.12.5,<0.13"
+required-version = ">=0.13.2,<0.14"
 exclude-newer = "2 weeks"
 
 [tool.pytest.ini_options]
