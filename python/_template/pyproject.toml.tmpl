@@ -28,7 +28,7 @@ Homepage = "https://github.com/temporalio/worker-integrations/tree/main/python/_
 Repository = "https://github.com/temporalio/worker-integrations"
 
 [build-system]
-requires = ["uv_build>=0.12.5,<0.13"]
+requires = ["uv_build>=0.13.2,<0.14"]
 build-backend = "uv_build"
 
 [tool.uv.build-backend]
@@ -40,20 +40,20 @@ module-name = "__MODULE__"
 [dependency-groups]
 dev = [
   "pyright>=1.1.414,<2",
-  "basedpyright>=1.40.2,<2",
-  "mypy>=1.20.2,<2",
-  "ruff>=0.15.12,<0.16",
-  "pydocstyle>=6.3,<7",
+  "basedpyright~=1.40",
+  "mypy~=2.4",
+  "ruff~=0.17.2",
+  "pydocstyle~=6.3",
   "pytest~=9.0",
-  "pytest-asyncio>=0.21.2,<0.22",
+  "pytest-asyncio~=1.0",
   "pytest-timeout~=2.2",
-  "pytest-xdist>=3.6,<4",
+  "pytest-xdist~=3.6",
   "tomli>=2.0; python_version < '3.11'",
 ]
 
 [tool.uv]
 default-groups = ["dev"]
-required-version = ">=0.12.5,<0.13"              # same value as scripts/pyproject.toml; CI reads it via setup-uv
+required-version = ">=0.13.2,<0.14"              # same value as scripts/pyproject.toml; CI reads it via setup-uv
 exclude-newer = "2 weeks"                        # supply-chain cooldown for third-party packages
 exclude-newer-package = { temporalio = false }   # the SDK is exempt: releases must be adoptable on day one
 link-mode = "copy"

@@ -13,7 +13,7 @@ from contextlib import (
 )
 from dataclasses import dataclass, field
 from datetime import timedelta
-from typing import TypeAlias
+from typing import TypeAlias, cast
 
 import modal
 
@@ -319,6 +319,7 @@ async def _run_configure(
     if inspect.isasyncgen(result):
         # A callable that returns an async generator (e.g. an object whose
         # __call__ is an async generator function) drives like the bare form.
-        return asynccontextmanager(lambda: result)()
+        gen = cast("AsyncGenerator[None, None]", result)
+        return asynccontextmanager(lambda: gen)()
     # A @asynccontextmanager-decorated callback returns the context manager directly.
     return result if isinstance(result, AbstractAsyncContextManager) else None
