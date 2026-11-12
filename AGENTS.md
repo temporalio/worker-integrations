@@ -93,10 +93,15 @@ through that module's `IntegrationMeta`, which validates the schema; never index
   letters and digits separated by single `-`), and isn't used by another package in this
   repository. Nothing checks names published from other repositories, so before a package's first
   release, check that its name isn't already on PyPI.
-- **Root API naming:** below `temporalio.worker_integrations`, name a package after its vendor and
+- **Root API naming:** below `temporalio.worker_integrations`, name a package after its provider and
   the compute product it runs on, e.g. `modal.function` or `gcp.cloud_run`. Don't add a `worker`
   suffix, since the namespace already says it, except where the product name is a Python keyword
   and can't be imported: `aws.lambda_worker`.
+- **Published name choice:** publish as `temporalio-<provider>-<product>-worker`, e.g.
+  `temporalio-modal-function-worker` for `modal.function`. The published name doesn't include the
+  `worker_integrations` namespace, so the `-worker` suffix is what marks it as a compute
+  integration rather than, say, an agent framework or inference one. Override the default where it
+  lacks the suffix; `aws.lambda_worker`'s default already has it.
 - **Layout:** the package folder contains `pyproject.toml`, `uv.lock`, `integration.toml`,
   `Makefile`, `README.md`, `LICENSE`, `tests/`, and the root API under `src/` as a directory path
   (e.g. `src/temporalio/worker_integrations/aws/lambda_worker/`).
