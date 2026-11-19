@@ -1,0 +1,81 @@
+# Reusable workflow for ONE Go module, called by ci.yml once per changed module.
+# Module-specific behavior is data (go/<module>/integration.toml, go.mod, Makefile);
+# never edit this file for module-specific things.
+name: Go package
+
+on:
+  workflow_call:
+    inputs:
+      package:
+        description: Module folder path under go/ (e.g. aws/lambda)
+        type: string
+        required: true
+      deps:
+        description: Space-separated dependency modes for the matrix (locked, latest; see scripts/ci/matrix.py)
+        type: string
+        required: true
+
+permissions: {}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  matrix:
+    name: matrix
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version-file: scripts/pyproject.toml
+      - id: matrix
+        env:
+          PACKAGE: ${{ inputs.package }}
+          DEPS: ${{ inputs.deps }}
+        # $DEPS is deliberately unquoted so that each mode becomes one argument; matrix.py rejects unknown modes.
+        run: uv run --project scripts --locked python scripts/ci/matrix.py --package-dir "go/$PACKAGE" --deps $DEPS --github-output "$GITHUB_OUTPUT"
+
+  test:
+    name: ${{ inputs.package }} (${{ matrix.os }}, go${{ matrix.runtime }}, ${{ matrix.deps }})
+    needs: matrix
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.matrix.outputs.matrix) }}
+    env:
+      PACKAGE_DIR: go/${{ inputs.package }} # run steps `cd` here; never interpolate inputs into run blocks
+      DEPS: ${{ matrix.deps }} # read by every make target (go/_shared/go.mk)
+      # Only use the Go that setup-go installed for this cell: if go.mod asks for a newer one (in its
+      # `go` or `toolchain` line), fail instead of quietly downloading and testing that one.
+      GOTOOLCHAIN: local
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ matrix.runtime }}
+          check-latest: true # e.g. "1.27" gets the newest 1.27.x, not the runner's cached one
+          cache-dependency-path: go/${{ inputs.package }}/go.sum
+      - name: Install GNU make (Windows)
+        if: runner.os == 'Windows'
+        run: choco install make -y --no-progress
+      - name: Sync dependencies
+        run: cd "$PACKAGE_DIR" && make sync
+      - name: Lint
+        run: cd "$PACKAGE_DIR" && make lint
+      - name: Test
+        env:
+          GO_TEST_ARGS: -race
+        run: cd "$PACKAGE_DIR" && make test

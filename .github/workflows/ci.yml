@@ -4,6 +4,8 @@
 #   changes      -> detect which packages the event (e.g., a PR) touches (scripts/ci/detect_changes.py)
 #   tooling      -> tests for the repository tooling under scripts/ (always)
 #   conventions  -> enforce repository conventions (scripts/ci/check_conventions.py; always)
+#   go           -> _go-package.yml once per changed Go module (locked dependencies, which are
+#                   already the lowest allowed; newest allowed dependencies on the nightly schedule)
 #   python       -> _python-package.yml once per changed Python package (locked and lowest
 #                   dependencies; newest allowed dependencies on the nightly schedule)
 #   nightly-report -> one issue per package failing on the nightly schedule (scripts/ci/nightly_report.py)
@@ -40,6 +42,7 @@ jobs:
     permissions:
       contents: read
     outputs:
+      go: ${{ steps.detect.outputs.go }}
       python: ${{ steps.detect.outputs.python }}
       any: ${{ steps.detect.outputs.any }}
       mode: ${{ steps.detect.outputs.mode }}
@@ -91,6 +94,24 @@ jobs:
       - name: Check repository conventions
         run: uv run --project scripts --locked python scripts/ci/check_conventions.py
 
+  go:
+    name: Go
+    needs: changes
+    if: needs.changes.result == 'success' && needs.changes.outputs.go != '[]'
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        package: ${{ fromJson(needs.changes.outputs.go) }}
+    uses: ./.github/workflows/_go-package.yml
+    with:
+      package: ${{ matrix.package }}
+      # nightly or `latest-deps` dispatch: latest deps only
+      # everything else: locked deps, which Go's minimal version selection already resolves to the
+      # lowest versions go.mod allows, so there's no separate lowest mode
+      deps: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.latest-deps)) && 'latest' || 'locked' }}
+
   python:
     name: Python
     needs: changes
@@ -110,7 +131,7 @@ jobs:
 
   nightly-report:
     name: Nightly report
-    needs: [changes, python]
+    needs: [changes, go, python]
     # !cancelled(): report even when package jobs failed, but not on a run someone cancelled
     if: ${{ !cancelled() && github.event_name == 'schedule' && needs.changes.result == 'success' }}
     # Queue reports (e.g. from a re-run of an old nightly) so that two can't open duplicate issues
@@ -134,7 +155,7 @@ jobs:
 
   ci-status:
     name: ci-status
-    needs: [changes, tooling, conventions, python, nightly-report]
+    needs: [changes, tooling, conventions, go, python, nightly-report]
     if: always()
     runs-on: ubuntu-latest
     permissions: {}

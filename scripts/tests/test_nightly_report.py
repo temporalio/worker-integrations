@@ -28,6 +28,18 @@ def test_classify_groups_jobs_by_package() -> None:
     assert passing == {"python/azure_functions"}
 
 
+def test_classify_handles_nested_go_module_names() -> None:
+    failing, passing = nightly_report.classify(
+        [
+            _job("Go (aws/lambda) / matrix", "success"),
+            _job("Go (aws/lambda) / aws/lambda (ubuntu-latest, go1.27, latest)", "success"),
+            _job("Go (aws/lambda/otel) / aws/lambda/otel (windows-latest, go1.27, latest)", "failure"),
+        ]
+    )
+    assert failing == {"go/aws/lambda/otel"}
+    assert passing == {"go/aws/lambda"}
+
+
 def test_classify_leaves_unfinished_or_cancelled_packages_alone() -> None:
     failing, passing = nightly_report.classify(
         [
