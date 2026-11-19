@@ -62,14 +62,32 @@ def make_package(root: Path, language: str, name: str) -> Path:
     return d
 
 
-def copy_python_support(root: Path) -> None:
-    """Copy this repository's python/_shared, python/_template, LICENSE and scripts/pyproject.toml into `root`."""
-    for rel in ("python/_shared", "python/_template"):
+def copy_language_support(root: Path, language: str) -> None:
+    """Copy what scaffolding and checking `language`'s packages need into `root`.
+
+    That's this repository's <language>/_shared and <language>/_template, LICENSE, and
+    scripts/pyproject.toml (whose uv version Python packages must match).
+    """
+    for rel in (f"{language}/_shared", f"{language}/_template"):
         if not (root / rel).exists():
             shutil.copytree(REPO / rel, root / rel)
     (root / "scripts").mkdir(exist_ok=True)
     shutil.copy(REPO / "scripts" / "pyproject.toml", root / "scripts" / "pyproject.toml")
     shutil.copy(REPO / "LICENSE", root / "LICENSE")
+
+
+def make_go_package(
+    root: Path, module_path: str = "go.temporal.io/worker-integrations/aws/lambda", maturity: str = "public-preview"
+) -> Path:
+    """Scaffold a Go module in `root` the way a contributor would, plus a stand-in go.sum.
+
+    The result passes the conventions check exactly as a real module would.
+    """
+    copy_language_support(root, "go")
+    scaffold(root, {"go": module_path}, f"Fake {module_path} integration", maturity)
+    d = root / "go" / TOOLED_LANGUAGES["go"].package_folder(module_path, module_path)
+    (d / "go.sum").write_text("")
+    return d
 
 
 def make_python_package(
@@ -79,7 +97,7 @@ def make_python_package(
 
     The result passes the conventions check exactly as a real package would.
     """
-    copy_python_support(root)
+    copy_language_support(root, "python")
     scaffold(root, {"python": root_api}, f"Fake {root_api} integration", maturity)
     python = TOOLED_LANGUAGES["python"]
     d = root / "python" / python.package_folder(root_api, python.published_name(root_api))
