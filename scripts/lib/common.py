@@ -32,6 +32,8 @@ LANGUAGE_MANIFESTS: dict[str, tuple[str, ...]] = {
 }
 LANGUAGES: tuple[str, ...] = tuple(LANGUAGE_MANIFESTS)
 
+REPO_URL = "https://github.com/temporalio/worker-integrations"
+
 # Languages whose package folders mirror a path-shaped published name, so packages can sit at
 # any depth and nest inside each other (a Go module's folder mirrors its module path). Every
 # other language has one flat folder per package, directly under the language root.
