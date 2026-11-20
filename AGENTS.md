@@ -79,8 +79,9 @@ through that module's `IntegrationMeta`, which validates the schema; never index
   changed the package since its previous release (for a final release, the previous final
   release), excluding packages nested inside it. Commit subjects are therefore user-facing: on a
   squash merge, the pull request's title becomes the subject.
-- Each package's `README.md` states the range of base SDK versions it supports. Package versions
-  do not imply compatibility with the same-numbered SDK version.
+- Each package's `README.md` states the range of base SDK versions it supports (for Go, by
+  pointing to `go.mod`, whose requirement is the minimum). Package versions do not imply
+  compatibility with the same-numbered SDK version.
 
 ## Python conventions
 
@@ -167,6 +168,55 @@ steps: confirm the published name, add dependencies, set the real `temporalio` f
 Template files end in `.tmpl` so that tools ignore the template itself; the script drops the
 suffix. If you change the template, keep `python/_template/` and
 `scripts/lib/languages/python.py` (naming, conventions checks and scaffolding) in sync.
+
+## Go conventions
+
+- **Names:** every module's path (`published-name` in `integration.toml`) is under
+  `go.temporal.io/worker-integrations/`, and its folder is the rest of the path, e.g.
+  `go.temporal.io/worker-integrations/aws/lambda` lives in `go/aws/lambda/` and is tagged
+  `go/aws/lambda/v<version>`. Folders mirror module paths, as Go developers expect, so a module
+  path can't be overridden the way a Python published name can. Each path element is lowercase
+  letters and digits, starting with a letter; `testdata` and major version suffixes
+  (`v2`, ...) aren't allowed. `root-api` is the module path too, since that's the import path of
+  the module's root package.
+- **Name choice:** name a module after its provider and the compute product it runs on, e.g.
+  `aws/lambda` or `gcp/cloudrun`. The module path already says `worker-integrations`, so don't add a
+  `worker` suffix.
+- **Layout:** the module folder contains `go.mod`, `go.sum`, `integration.toml`, `Makefile`,
+  `README.md`, `LICENSE`, and the root package's source. A module nested in another one's folder
+  (e.g. `go/aws/lambda/otel/` in `go/aws/lambda/`) is a separate module, with its own files and
+  releases.
+- **go.mod:** its `go` directive is the minimum supported Go version, and must equal the first
+  `[ci] runtime-versions` entry. No `replace` directives.
+- **Versions:** release versions are `X.Y.Z`, or `X.Y.Z` followed by `-alpha.<N>`, `-beta.<N>` or
+  `-rc.<N>` (e.g. `0.1.0-rc.1`). Major versions 2 and up aren't supported, since Go requires a
+  `/vN` suffix on the module path for them.
+- **Dependencies:** `go.mod` and `go.sum` are committed, and `make lint` fails if they aren't tidy.
+  Go's minimal version selection builds with the lowest versions `go.mod` requires, so the `locked`
+  dependency mode already tests them and there's no `lowest` mode; `make sync DEPS=latest`
+  upgrades to the newest allowed versions instead (never commit the result).
+- **Tooling:** `gofmt`, `go vet`, `go test` and `go build`, all run through `make lint`, `make test`
+  and `make build`. `go/_shared/go.mk` holds the make targets; a module's `Makefile` is exactly one
+  line that includes it, with one `../` per element of the module's folder path.
+- **Vanity imports:** `go.temporal.io` serves a static page per module path, so each module needs
+  its own page before its first release (see the next steps `scripts/new_package.py` prints).
+
+### Adding a Go module
+
+```bash
+uv run --project scripts --locked python scripts/new_package.py \
+    --go go.temporal.io/worker-integrations/aws/lambda \
+    --description "Temporal worker integration for AWS Lambda" \
+    --maturity public-preview
+```
+
+This creates `go/aws/lambda/` from `go/_template/` and copies the root `LICENSE`. The folder
+follows the module path, so there's no `--go-published-name`. The script then prints the remaining
+steps: write the code, add dependencies with `go get` and run `go mod tidy` (which creates
+`go.sum`; commit it), keep the minimum `[ci] runtime-versions` entry equal to `go.mod`'s `go`
+directive, `make lint` and `make test`, and request the module's vanity import page. The
+`go.temporal.io/sdk` version that `go.mod` requires is the module's supported minimum. If you
+change the template, keep `go/_template/` and `scripts/lib/languages/go.py` in sync.
 
 ## CI
 

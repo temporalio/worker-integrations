@@ -5,12 +5,14 @@ Usage:
     uv run --project scripts --locked python scripts/new_package.py \\
         --description "..." \\
         [--maturity pre-release|public-preview|generally-available] \\
+        [--go <module path>] \\
         [--python <root API> [--python-published-name <name>]]
 
 Each language option takes the name that identifies a package in that language, since naming
-styles differ by language; the package's published name derives from it unless
---<language>-published-name overrides it, and its folder derives from the published name. Every
-requested name is validated before anything is written.
+styles differ by language; the package's published name derives from it, unless the language
+offers --<language>-published-name to override it, and its folder derives from the published
+name. Every requested name is validated before anything is written.
+  - Go: the module path; --go go.temporal.io/worker-integrations/aws/lambda creates go/aws/lambda.
   - Python: the full root API; --python temporalio.worker_integrations.aws.lambda_worker
     creates python/aws_lambda_worker published as temporalio-aws-lambda-worker, and adding
     --python-published-name temporalio-aws-lambda creates python/aws_lambda instead.
@@ -73,9 +75,10 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     for language, spec in TOOLED_LANGUAGES.items():
         parser.add_argument(f"--{language}", metavar="NAME", help=spec.name_help)
-        parser.add_argument(
-            f"--{language}-published-name", metavar="NAME", help=f"override the default published name for --{language}"
-        )
+        if spec.published_name_overridable:
+            parser.add_argument(
+                f"--{language}-published-name", metavar="NAME", help=f"override the default published name for --{language}"
+            )
     parser.add_argument("--description", required=True, help="one-line package description")
     parser.add_argument("--maturity", choices=sorted(MATURITIES), default="pre-release")
     parser.add_argument("--repo-root", type=Path, default=None)
@@ -83,7 +86,7 @@ def main(argv: list[str] | None = None) -> int:
 
     names = {lang: getattr(args, lang) for lang in TOOLED_LANGUAGES if getattr(args, lang) is not None}
     published_name_overrides = {
-        lang: name for lang in TOOLED_LANGUAGES if (name := getattr(args, f"{lang}_published_name")) is not None
+        lang: name for lang in TOOLED_LANGUAGES if (name := getattr(args, f"{lang}_published_name", None)) is not None
     }
     root = repo_root(args.repo_root)
     try:

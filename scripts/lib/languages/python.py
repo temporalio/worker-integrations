@@ -95,6 +95,8 @@ def _requested_module(root_api: str) -> str:
 class Python(Language):
     name = "python"
     name_help = f"full root API, e.g. {PROJECT_NAMESPACE}.aws.lambda_worker"
+    # The published name derives from the root API by default, but can be anything valid.
+    published_name_overridable = True
     next_steps = """\
   1. Confirm the published name, {published_name} (published-name in integration.toml):
      - If you want a different name, delete python/{folder} and re-run new_package.py with

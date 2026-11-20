@@ -1,0 +1,9 @@
+# Schema: https://github.com/temporalio/worker-integrations/blob/main/scripts/lib/integration_toml.py
+
+[package]
+published-name = "__MODULE__"
+root-api = "__MODULE__"
+maturity = "__MATURITY__"
+
+[ci]
+runtime-versions = ["1.26.0", "1.27"]   # the first must equal go.mod's go directive

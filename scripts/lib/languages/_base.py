@@ -27,6 +27,8 @@ class Language(ABC):
     """Language root folder, e.g. "python"."""
     name_help: ClassVar[str]
     """Help for new_package.py's --<name> option: what name it takes."""
+    published_name_overridable: ClassVar[bool] = False
+    """Whether new_package.py offers --<name>-published-name to override the default published name."""
     next_steps: ClassVar[str]
     """Printed after scaffolding a package with new_package.py.
 
@@ -59,6 +61,8 @@ class Language(ABC):
 
         Raises ValueError if the name is invalid.
         """
+        if override is not None and not self.published_name_overridable:
+            raise ValueError(f"{self.name} published names can't be overridden")
         published_name = self.default_published_name(requested) if override is None else override
         self.validate_published_name(published_name)
         return published_name

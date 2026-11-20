@@ -2,13 +2,15 @@ from __future__ import annotations
 
 import io
 import json
+import tomllib
 import urllib.error
 import urllib.request
 from pathlib import Path
 
 import pytest
 
-from conftest import make_python_package, replace_in_file, run_checker
+import new_package
+from conftest import copy_language_support, make_python_package, replace_in_file, run_checker
 from lib.languages.python import Python
 from lib.release_version import ReleaseVersion
 
@@ -145,6 +147,89 @@ def test_python_source_in_shared_is_rejected(repo: Path) -> None:
     make_python_package(repo)
     (repo / "python" / "_shared" / "helpers.py").write_text("x = 1\n")
     assert any("must be duplicated into each package" in v for v in run_checker(repo))
+
+
+@pytest.mark.parametrize("maturity", ["pre-release", "public-preview", "generally-available"])
+def test_python_new_package_creates_a_package_that_passes_conventions(repo: Path, maturity: str) -> None:
+    copy_language_support(repo, "python")
+    args = [
+        "--python", "temporalio.worker_integrations.aws.lambda_worker",
+        "--description", "Lambda worker", "--maturity", maturity, "--repo-root", str(repo),
+    ]
+    assert new_package.main(args) == 0
+
+    d = repo / "python" / "aws_lambda_worker"
+    meta = tomllib.loads((d / "integration.toml").read_text())["package"]
+    assert meta["published-name"] == "temporalio-aws-lambda-worker"
+    assert meta["root-api"] == "temporalio.worker_integrations.aws.lambda_worker"
+    assert meta["maturity"] == maturity
+    assert (d / "src/temporalio/worker_integrations/aws/lambda_worker/__init__.py").is_file()
+    assert not list(d.rglob("*.tmpl"))
+    for path in d.rglob("*"):
+        assert "__" not in path.relative_to(d).as_posix().replace("__init__", ""), path
+        if path.is_file():
+            assert not any(p in path.read_text() for p in ("__NAME__", "__MODULE__", "__PUBLISHED_NAME__")), path
+
+    (d / "uv.lock").write_text("version = 1\n")  # what `make sync` would create
+    assert run_checker(repo) == []
+
+
+@pytest.mark.parametrize("root_api", [
+    "aws_lambda_worker",
+    "temporalio.aws_lambda_worker",
+    "temporalio.worker_integrations",
+    "temporalio.worker_integrations.",
+    "temporalio.worker_integrations.AWS.lambda",
+    "temporalio.worker_integrations.aws-lambda",
+    "temporalio.worker_integrations.aws..lambda",
+    "temporalio.worker_integrations.1aws",
+])
+def test_python_new_package_rejects_invalid_root_apis(repo: Path, root_api: str) -> None:
+    copy_language_support(repo, "python")
+    with pytest.raises(ValueError, match="module under temporalio.worker_integrations"):
+        new_package.scaffold(repo, {"python": root_api}, "x", "pre-release")
+    assert new_package.main(["--python", root_api, "--description", "x", "--repo-root", str(repo)]) == 1
+    assert sorted(p.name for p in (repo / "python").iterdir()) == ["_shared", "_template"]
+
+
+def test_python_new_package_published_name_can_be_overridden(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    copy_language_support(repo, "python")
+    args = [
+        "--python", "temporalio.worker_integrations.modal.function",
+        "--python-published-name", "temporalio-modal-function-worker",
+        "--description", "Modal worker", "--repo-root", str(repo),
+    ]
+    assert new_package.main(args) == 0
+
+    # The folder follows the published name, not the root API
+    d = repo / "python" / "modal_function_worker"
+    meta = tomllib.loads((d / "integration.toml").read_text())["package"]
+    assert meta["published-name"] == "temporalio-modal-function-worker"
+    assert meta["root-api"] == "temporalio.worker_integrations.modal.function"
+    assert (d / "src/temporalio/worker_integrations/modal/function/__init__.py").is_file()
+    assert "https://pypi.org/project/temporalio-modal-function-worker/" in capsys.readouterr().out
+    (d / "uv.lock").write_text("version = 1\n")
+    assert run_checker(repo) == []
+
+
+@pytest.mark.parametrize("published_name", [
+    "modal",
+    "temporalio",
+    "temporalio-",
+    "temporalio-Modal",
+    "temporalio_modal",
+    "temporalio-modal_function",
+    "temporalio--modal",
+    "temporalio.modal",
+])
+def test_python_new_package_rejects_invalid_published_names(repo: Path, published_name: str) -> None:
+    copy_language_support(repo, "python")
+    root_api = "temporalio.worker_integrations.modal.function"
+    with pytest.raises(ValueError, match="published-name must start with 'temporalio-'"):
+        new_package.scaffold(repo, {"python": root_api}, "x", "pre-release", {"python": published_name})
+    args = ["--python", root_api, "--python-published-name", published_name, "--description", "x", "--repo-root", str(repo)]
+    assert new_package.main(args) == 1
+    assert sorted(p.name for p in (repo / "python").iterdir()) == ["_shared", "_template"]
 
 
 @pytest.mark.parametrize("text,expected", [
