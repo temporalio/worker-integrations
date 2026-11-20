@@ -12,6 +12,8 @@ is built. Checks:
         1.0.0 (generally-available), or a pre-release of it
       - every later version is greater than every published version, and at least the first
         version for the package's current maturity (or a pre-release of it)
+    For a language whose release tag publishes the release (Go), the registry may already list the
+    version being released, so the version itself is left out of the published ones.
 
 Registries refuse to replace a published version, and users' version ranges assume versions only
 increase, so each release must be greater than every version already published.
@@ -96,6 +98,11 @@ def main(argv: list[str] | None = None) -> int:
         except ValueError:
             print(f"FAIL: {meta.published_name} has a published version this tooling can't order: {text!r}")
             return 1
+    # Publishing the GitHub release created the tag, so anyone may have fetched the version through
+    # the registry by now (e.g. on a re-run of this job). A version can't be released twice anyway:
+    # a tag has at most one release, and the tag ruleset and immutable releases keep it that way.
+    if language.tag_publishes:
+        published = [version for version in published if version != tag.version]
 
     problems = check_version_conventions(tag.version, meta.maturity, published)
     if problems:

@@ -11,9 +11,9 @@ Schema:
     runtime-versions = ["3.10", "3.14"]       # first = minimum, last = maximum supported runtime
 
     [smoke]                                   # optional
-    # Entry points under root-api (e.g. Python modules, TypeScript subpath exports, Java classes)
-    # that the smoke test imports from a base install (without optional features such as Python
-    # extras), in addition to root-api itself.
+    # Entry points under root-api (e.g. Python modules, Go packages, TypeScript subpath exports,
+    # Java classes) that the smoke test imports from a base install (without optional features
+    # such as Python extras), in addition to root-api itself.
     imports = ["temporalio.worker_integrations.aws.lambda_worker.testing"]
 
 Unknown tables and keys are errors, so that a misspelled optional key can't be silently ignored.

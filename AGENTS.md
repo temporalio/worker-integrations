@@ -200,6 +200,9 @@ suffix. If you change the template, keep `python/_template/` and
   line that includes it, with one `../` per element of the module's folder path.
 - **Vanity imports:** `go.temporal.io` serves a static page per module path, so each module needs
   its own page before its first release (see the next steps `scripts/new_package.py` prints).
+- **Smoke test:** after a release, CI builds a new module that requires the published version
+  and imports its root package. List other packages in the module that users import directly in
+  `integration.toml`'s `[smoke] imports`.
 
 ### Adding a Go module
 
@@ -261,7 +264,12 @@ change the template, keep `go/_template/` and `scripts/lib/languages/go.py` in s
   in the release workflow itself, never in a reusable workflow, and they're the only jobs with
   `id-token: write` (enforced by `scripts/tests/test_workflows.py`). Each package needs its own
   trusted publishers on PyPI and TestPyPI before its first release, set up by a PyPI organization
-  admin (see the next steps `scripts/new_package.py` prints). Retry a failed release by
+  admin (see the next steps `scripts/new_package.py` prints). Go has nothing to upload: publishing
+  the GitHub release creates the tag, which is the release, so `release-go.yml` instead
+  smoke-tests the published module with `scripts/ci/go/smoke.py` (its vanity import page, the
+  module proxy and checksum database, and a build that imports it). Since a Go version is public
+  before its release workflow runs, `check_release.py` leaves the version itself out of the
+  published versions it compares against (`Language.tag_publishes`). Retry a failed release by
   re-running only its failed jobs ("Re-run jobs" > "Re-run failed jobs" on the run's page in GitHub
   Actions, or `gh run rerun <run ID> --failed`); if the workflow itself needs a fix, release the
   next version. Runs for the same tag share a concurrency group, so they can't overlap.

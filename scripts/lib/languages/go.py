@@ -6,6 +6,7 @@ Checks (see AGENTS.md, "Go conventions"):
   * required files exist
   * go.mod declares the published name as its module path, its `go` directive equals the first
     [ci] runtime-versions entry, and it has no `replace` directives
+  * every [smoke] imports entry is a package in the module
   * the Makefile is exactly the one-line stub that includes go/_shared/go.mk
 
 Release versions are `X.Y.Z`, or a SemVer pre-release of it with phase alpha, beta or rc, e.g.
@@ -53,6 +54,7 @@ def folder_for(module_path: str) -> str:
 class Go(Language):
     name = "go"
     name_help = f"module path, e.g. {MODULE_PREFIX}aws/lambda"
+    tag_publishes = True
     next_steps = """\
   1. Write the module's code, then add its dependencies, e.g.:
        cd go/{folder}
@@ -124,6 +126,11 @@ class Go(Language):
             return
         if meta.root_api != module_path:
             ctx.fail(f"{rel}/integration.toml: root-api must equal published-name {module_path!r} (got {meta.root_api!r})")
+
+        # Smoke test imports must be packages in the module other than its root package
+        for import_path in meta.smoke_imports:
+            if not import_path.startswith(f"{module_path}/"):
+                ctx.fail(f"{rel}/integration.toml: [smoke] imports entry {import_path!r} must be a package in {module_path!r}")
 
         makefile = d / "Makefile"
         expected_makefile = f"include {'../' * len(package.name.split('/'))}_shared/go.mk\n"

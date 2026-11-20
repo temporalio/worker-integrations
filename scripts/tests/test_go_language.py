@@ -100,6 +100,32 @@ def test_go_directive_is_required(repo: Path) -> None:
     assert run_checker(repo) == ["go/aws/lambda/go.mod: must have a go directive"]
 
 
+@pytest.mark.parametrize("package", [
+    "go.temporal.io/worker-integrations/aws/lambda/client",
+    "go.temporal.io/worker-integrations/aws/lambda/client/testing",
+])
+def test_go_smoke_imports_package_in_module_passes(repo: Path, package: str) -> None:
+    d = make_go_package(repo)
+    with (d / "integration.toml").open("a") as fh:
+        fh.write(f'\n[smoke]\nimports = ["{package}"]\n')
+    assert run_checker(repo) == []
+
+
+@pytest.mark.parametrize("package", [
+    "go.temporal.io/worker-integrations/aws/lambda",
+    "go.temporal.io/worker-integrations/aws/lambdaclient",
+    "go.temporal.io/sdk/client",
+])
+def test_go_smoke_imports_must_be_packages_in_module(repo: Path, package: str) -> None:
+    d = make_go_package(repo)
+    with (d / "integration.toml").open("a") as fh:
+        fh.write(f'\n[smoke]\nimports = ["{package}"]\n')
+    assert run_checker(repo) == [
+        f"go/aws/lambda/integration.toml: [smoke] imports entry {package!r} must be a package in "
+        "'go.temporal.io/worker-integrations/aws/lambda'"
+    ]
+
+
 @pytest.mark.parametrize("replace", [
     "replace go.temporal.io/sdk => ../../../sdk-go\n",
     "replace (\n\tgo.temporal.io/sdk => ../../../sdk-go\n)\n",
