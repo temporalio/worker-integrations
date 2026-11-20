@@ -246,7 +246,9 @@ change the template, keep `go/_template/` and `scripts/lib/languages/go.py` in s
   cells), the Python workflow also runs `make build`, checks the wheel with
   `scripts/ci/python/check_wheel.py`, and smoke-tests the wheel and sdist in clean environments with
   `scripts/ci/python/smoke.py`. The wheel check also checks that both distributions have the
-  expected version: `0.0.0`, or the release version.
+  expected version: `0.0.0`, or the release version. Go has no distributions, so the Go workflow
+  ignores the matrix's `build` flag; it runs the tests with the race detector in every cell, and
+  sets `GOTOOLCHAIN=local`, so each cell tests the Go version it installed.
 - Each language has one release dry-run workflow (e.g. `release-python-dry-run.yml`), dispatched
   with a planned release tag. It runs `scripts/ci/check_release.py`, then calls the language's
   reusable workflow with the tag's version and the lockfile cells only. It never publishes
