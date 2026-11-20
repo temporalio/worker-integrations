@@ -37,12 +37,11 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from lib.common import Package, discover_packages, git, repo_root  # noqa: E402
+from lib.common import REPO_URL, Package, discover_packages, git, repo_root  # noqa: E402
 from lib.languages import TOOLED_LANGUAGES  # noqa: E402
 from lib.release_tag import ReleaseTag, parse_tag  # noqa: E402
 from lib.release_version import ReleaseVersion  # noqa: E402
 
-REPO_URL = "https://github.com/temporalio/worker-integrations"
 PULL_REQUEST_REF_RE = re.compile(r"\(#(\d+)\)")
 
 

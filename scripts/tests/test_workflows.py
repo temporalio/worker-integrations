@@ -48,19 +48,32 @@ def test_ci_status_is_the_fan_in() -> None:
     assert set(status["needs"]) == set(jobs) - {"ci-status"}
 
 
-def test_release_python_dry_run_tests_the_checked_package_and_version() -> None:
-    # The test job builds what the check job validated, so its inputs must come from the check's outputs.
-    jobs = yaml.safe_load((REPO / ".github/workflows/release-python-dry-run.yml").read_text())["jobs"]
+# Languages with release workflows, i.e. a release-<language>.yml (and its dry run)
+RELEASE_LANGUAGES = sorted(p.name.removeprefix("release-").removesuffix(".yml") for p in WORKFLOWS
+                           if p.name.startswith("release-") and not p.name.endswith("-dry-run.yml"))
+
+
+@pytest.mark.parametrize("language", RELEASE_LANGUAGES)
+def test_release_dry_run_tests_the_checked_package(language: str) -> None:
+    # The test job tests what the check job validated, so its inputs must come from the check's outputs.
+    jobs = yaml.safe_load((REPO / f".github/workflows/release-{language}-dry-run.yml").read_text())["jobs"]
     assert set(jobs["check"]["outputs"]) == {"package", "version", "prerelease"}
-    assert jobs["test"]["uses"] == "./.github/workflows/_python-package.yml"
+    assert f"--language {language} " in jobs["check"]["steps"][-1]["run"]
+    assert jobs["test"]["uses"] == f"./.github/workflows/_{language}-package.yml"
     assert jobs["test"]["with"]["package"] == "${{ needs.check.outputs.package }}"
+
+
+def test_release_python_dry_run_builds_the_checked_version() -> None:
+    jobs = yaml.safe_load((REPO / ".github/workflows/release-python-dry-run.yml").read_text())["jobs"]
     assert jobs["test"]["with"]["version"] == "${{ needs.check.outputs.version }}"
 
 
-def test_release_python_only_runs_for_published_releases() -> None:
-    # No manual trigger: publishing a GitHub release is the only way to publish a package
-    doc = yaml.safe_load((REPO / ".github/workflows/release-python.yml").read_text())
+@pytest.mark.parametrize("language", RELEASE_LANGUAGES)
+def test_release_only_runs_for_published_releases_of_its_language(language: str) -> None:
+    # No manual trigger: publishing a GitHub release is the only way to release a package
+    doc = yaml.safe_load((REPO / f".github/workflows/release-{language}.yml").read_text())
     assert doc[True] == {"release": {"types": ["published"]}}  # PyYAML reads the `on` key as True
+    assert doc["jobs"]["dry-run"]["if"] == f"startsWith(github.event.release.tag_name, '{language}/')"
 
 
 def test_only_the_publish_jobs_can_publish() -> None:
@@ -79,9 +92,10 @@ def test_only_the_publish_jobs_can_publish() -> None:
     assert token_jobs == {"release-python.yml:publish-testpypi", "release-python.yml:publish-pypi"}
 
 
-def test_release_python_reads_outputs_the_dry_run_provides() -> None:
-    release = (REPO / ".github/workflows/release-python.yml").read_text()
-    dry_run = yaml.safe_load((REPO / ".github/workflows/release-python-dry-run.yml").read_text())
+@pytest.mark.parametrize("language", RELEASE_LANGUAGES)
+def test_release_reads_outputs_the_dry_run_provides(language: str) -> None:
+    release = (REPO / f".github/workflows/release-{language}.yml").read_text()
+    dry_run = yaml.safe_load((REPO / f".github/workflows/release-{language}-dry-run.yml").read_text())
     outputs = dry_run[True]["workflow_call"]["outputs"]
     assert set(re.findall(r"needs\.dry-run\.outputs\.([\w-]+)", release)) <= set(outputs)
     for name, output in outputs.items():

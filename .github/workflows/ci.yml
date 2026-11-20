@@ -74,6 +74,10 @@ jobs:
           version-file: scripts/pyproject.toml
           enable-cache: true
           cache-dependency-glob: scripts/uv.lock
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: stable # the Go smoke test's tests build modules with it
+          cache: false
       - name: Tooling unit tests
         run: uv run --project scripts --locked pytest scripts/tests -q
 
