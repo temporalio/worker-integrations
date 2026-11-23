@@ -29,6 +29,11 @@ class Language(ABC):
     """Help for new_package.py's --<name> option: what name it takes."""
     published_name_overridable: ClassVar[bool] = False
     """Whether new_package.py offers --<name>-published-name to override the default published name."""
+    tag_publishes: ClassVar[bool] = False
+    """Whether a release's tag is what publishes it (e.g. Go, whose module proxy serves tagged versions).
+
+    The release workflow then runs after the version is public, so its registry may already list it.
+    """
     next_steps: ClassVar[str]
     """Printed after scaffolding a package with new_package.py.
 

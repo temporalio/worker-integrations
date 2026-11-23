@@ -1,0 +1,94 @@
+# Release workflow for ONE Go module, started by publishing its GitHub release (tag
+# go/<module>/v<version>, e.g. go/aws/lambda/v0.1.0). It has no manual trigger: dispatch
+# release-go-dry-run.yml to try a release without publishing anything.
+#
+# There's nothing to upload: publishing the GitHub release creates the tag, and the tag is the
+# release, since Go fetches modules straight from this repository through the go.temporal.io vanity
+# import page and the module proxy. So by the time this runs, the version is already public, and
+# this workflow checks it rather than publishing it. That's why the dry run on main matters.
+#
+#   dry-run  -> release-go-dry-run.yml for the tag: checks and tests
+#   verify   -> checks that only apply to a real release: the tag is on main, and the GitHub
+#               release's pre-release flag is right
+#   smoke    -> checks that users can get the version: the vanity import page, the module proxy and
+#               checksum database, and a build that imports it (scripts/ci/go/smoke.py)
+#
+# If a job fails, re-run only the failed jobs: on the run's page in GitHub Actions, "Re-run jobs" >
+# "Re-run failed jobs" (or `gh run rerun <run ID> --failed`). If the release itself needs a fix,
+# merge it and release the next version.
+name: Release (Go)
+
+on:
+  release:
+    types: [published]
+
+permissions: {}
+
+defaults:
+  run:
+    shell: bash
+
+# A second run for the same tag waits for the first. That shouldn't be possible anyway: the
+# repository has immutable releases enabled, so a tag can't get a second published release. It's
+# per tag rather than one group for every release, since GitHub keeps only one pending run per
+# group and cancels older ones.
+concurrency:
+  group: release-go-${{ github.event.release.tag_name }}
+  cancel-in-progress: false
+
+jobs:
+  dry-run:
+    name: Dry run
+    # Release events fire for every language's tags
+    if: startsWith(github.event.release.tag_name, 'go/')
+    permissions:
+      contents: read
+    uses: ./.github/workflows/release-go-dry-run.yml
+    with:
+      tag: ${{ github.event.release.tag_name }}
+
+  verify:
+    name: Verify release
+    needs: dry-run
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # for origin/main
+          persist-credentials: false
+      - name: The tag is on main
+        run: |
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main \
+            || { echo "::error::release tags must point at a commit on main"; exit 1; }
+      - name: The GitHub release's pre-release flag is right
+        env:
+          EXPECTED: ${{ needs.dry-run.outputs.prerelease }}
+          ACTUAL: ${{ github.event.release.prerelease }}
+        run: |
+          [ "$EXPECTED" = "$ACTUAL" ] \
+            || { echo "::error::the GitHub release's pre-release flag must be $EXPECTED (see check_release.py)"; exit 1; }
+
+  smoke:
+    name: Smoke-test the published module
+    needs: [dry-run, verify]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version-file: scripts/pyproject.toml
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go/${{ needs.dry-run.outputs.package }}/go.mod # the module's minimum Go
+          cache: false # the smoke test uses its own empty module cache
+      - name: Smoke-test the published module
+        env:
+          PACKAGE: ${{ needs.dry-run.outputs.package }}
+          VERSION: ${{ needs.dry-run.outputs.version }}
+        run: uv run --project scripts --locked python scripts/ci/go/smoke.py --package-dir "go/$PACKAGE" --version "$VERSION"

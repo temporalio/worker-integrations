@@ -7,8 +7,8 @@ platforms, such as AWS Lambda and Google Cloud Run, built on top of the base SDK
 [sdk-go](https://github.com/temporalio/sdk-go)). Each integration is its own package with its
 own dependencies, tests, version and release cadence.
 
-There are no packages here yet; the existing integrations are being moved here from the `contrib`
-directories of the Temporal SDK repositories, and are still published from there for now.
+The existing integrations are being moved here from the `contrib` directories of the Temporal SDK
+repositories; until they're moved, they're still published from there.
 
 For now, samples for these integrations live in the per-language `samples-<language>` repositories (for
 example, [samples-go](https://github.com/temporalio/samples-go)), not in this repository.
@@ -76,7 +76,7 @@ The recommended steps to create a new release are as follows:
 
 1. Manually trigger a dry-run release CI workflow for the relevant language with the planned tag name,
    to confirm the validity of the release before the tag is actually created.
-   (TODO: only Python has one so far) For example:
+   (TODO: only Python and Go have one so far) For example:
 
    ```bash
    gh workflow run release-<language>-dry-run.yml --ref main -f tag=<language>/<package>/v<version>
@@ -105,7 +105,7 @@ The recommended steps to create a new release are as follows:
 4. Publish the release from the draft, letting GitHub create the specified tag.
 5. Monitor the CI workflows triggered automatically by the release publication, which will publish a
    new package version to the language-specific package registry (if relevant) and run smoke tests.
-   (TODO: only Python has one so far)
+   (TODO: only Python and Go have one so far)
    - If a job fails, re-run only the failed jobs, either on the run's page in GitHub Actions (click
      "Re-run jobs", then "Re-run failed jobs") or from the command line:
 

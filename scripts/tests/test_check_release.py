@@ -5,7 +5,8 @@ from pathlib import Path
 import pytest
 
 from ci import check_release
-from conftest import commit_all, make_python_package
+from conftest import commit_all, make_go_package, make_python_package
+from lib.languages.go import Go
 from lib.languages.python import Python
 from lib.release_version import ReleaseVersion
 
@@ -121,3 +122,22 @@ def test_main_rejects_an_unorderable_published_version(
         "FAIL: temporalio-aws-lambda-worker has a published version this tooling can't order: '0.0.1.post1'"
         in capsys.readouterr().out
     )
+
+
+@pytest.mark.parametrize("published", [["0.1.0"], ["0.0.1", "0.1.0"]])
+def test_main_allows_a_go_version_the_proxy_already_lists(
+    repo: Path, monkeypatch: pytest.MonkeyPatch, published: list[str]
+) -> None:
+    # Publishing a Go release creates its tag, so the proxy may already list the version being released
+    make_go_package(repo, maturity="public-preview")
+    monkeypatch.setattr(Go, "published_versions", lambda self, published_name: published)
+    assert check_release.main(["--language", "go", "--repo-root", str(repo), "go/aws/lambda/v0.1.0"]) == 0
+
+
+def test_main_still_checks_a_go_version_against_the_others(
+    repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    make_go_package(repo, maturity="public-preview")
+    monkeypatch.setattr(Go, "published_versions", lambda self, published_name: ["0.1.0", "0.2.0"])
+    assert check_release.main(["--language", "go", "--repo-root", str(repo), "go/aws/lambda/v0.1.0"]) == 1
+    assert "0.1.0 must be greater than the newest published version, 0.2.0" in capsys.readouterr().out

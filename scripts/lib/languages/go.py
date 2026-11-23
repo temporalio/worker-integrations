@@ -6,6 +6,8 @@ Checks (see AGENTS.md, "Go conventions"):
   * required files exist
   * go.mod declares the published name as its module path, its `go` directive equals the first
     [ci] runtime-versions entry, and it has no `replace` directives
+  * every [smoke] imports entry is a package in the module: a folder with Go files, outside any
+    nested module
   * the Makefile is exactly the one-line stub that includes go/_shared/go.mk
 
 Release versions are `X.Y.Z`, or a SemVer pre-release of it with phase alpha, beta or rc, e.g.
@@ -53,6 +55,7 @@ def folder_for(module_path: str) -> str:
 class Go(Language):
     name = "go"
     name_help = f"module path, e.g. {MODULE_PREFIX}aws/lambda"
+    tag_publishes = True
     next_steps = """\
   1. Write the module's code, then add its dependencies, e.g.:
        cd go/{folder}
@@ -125,6 +128,9 @@ class Go(Language):
         if meta.root_api != module_path:
             ctx.fail(f"{rel}/integration.toml: root-api must equal published-name {module_path!r} (got {meta.root_api!r})")
 
+        for import_path in meta.smoke_imports:
+            _check_smoke_import(ctx, package, module_path, import_path)
+
         makefile = d / "Makefile"
         expected_makefile = f"include {'../' * len(package.name.split('/'))}_shared/go.mk\n"
         if makefile.is_file() and makefile.read_text() != expected_makefile:
@@ -162,6 +168,35 @@ class Go(Language):
                 return []
             raise
         return [line.removeprefix("v") for line in text.split()]
+
+
+def _check_smoke_import(ctx: CheckContext, package: Package, module_path: str, import_path: str) -> None:
+    """Check that a [smoke] imports entry is a package in the module, other than its root package.
+
+    The smoke test only runs after a release is public (scripts/ci/go/smoke.py), so this checks
+    the entry against the module's folders instead, before anything is released.
+    """
+    rel = package.rel
+    elements = import_path.removeprefix(f"{module_path}/").split("/")
+    if not import_path.startswith(f"{module_path}/") or any(e in ("", ".", "..") for e in elements):
+        ctx.fail(f"{rel}/integration.toml: [smoke] imports entry {import_path!r} must be a package in {module_path!r}")
+        return
+    # A folder with its own go.mod starts another module, which the smoke test would fetch at
+    # whatever version it resolves to, instead of this release
+    for depth in range(1, len(elements) + 1):
+        folder = "/".join(elements[:depth])
+        if (package.path / folder / "go.mod").is_file():
+            ctx.fail(
+                f"{rel}/integration.toml: [smoke] imports entry {import_path!r} is in the nested module "
+                f"{rel}/{folder}, not in {module_path!r}"
+            )
+            return
+    folder = "/".join(elements)
+    if not any(f.is_file() and not f.name.endswith("_test.go") for f in (package.path / folder).glob("*.go")):
+        ctx.fail(
+            f"{rel}/integration.toml: [smoke] imports entry {import_path!r} has no package: "
+            f"{rel}/{folder} has no Go files other than tests"
+        )
 
 
 def _check_go_mod(ctx: CheckContext, package: Package, meta: IntegrationMeta) -> None:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import json
 import tomllib
 import urllib.error
 import urllib.request
@@ -98,6 +99,65 @@ def test_go_directive_is_required(repo: Path) -> None:
     d = make_go_package(repo)
     replace_in_file(d / "go.mod", "go 1.26.0", "")
     assert run_checker(repo) == ["go/aws/lambda/go.mod: must have a go directive"]
+
+
+def add_smoke_imports(d: Path, *imports: str) -> None:
+    with (d / "integration.toml").open("a") as fh:
+        fh.write(f"\n[smoke]\nimports = {json.dumps(list(imports))}\n")
+
+
+def add_go_file(d: Path, folder: str, name: str = "doc.go") -> None:
+    (d / folder).mkdir(parents=True, exist_ok=True)
+    (d / folder / name).write_text(f"package {folder.rpartition('/')[2]}\n")
+
+
+@pytest.mark.parametrize("folder", ["client", "client/testing"])
+def test_go_smoke_imports_package_in_module_passes(repo: Path, folder: str) -> None:
+    d = make_go_package(repo)
+    add_go_file(d, folder)
+    add_smoke_imports(d, f"go.temporal.io/worker-integrations/aws/lambda/{folder}")
+    assert run_checker(repo) == []
+
+
+@pytest.mark.parametrize("package", [
+    "go.temporal.io/worker-integrations/aws/lambda",
+    "go.temporal.io/worker-integrations/aws/lambdaclient",
+    "go.temporal.io/worker-integrations/aws/lambda/../other",
+    "go.temporal.io/worker-integrations/aws/lambda//client",
+    "go.temporal.io/sdk/client",
+])
+def test_go_smoke_imports_must_be_packages_in_module(repo: Path, package: str) -> None:
+    d = make_go_package(repo)
+    add_smoke_imports(d, package)
+    assert run_checker(repo) == [
+        f"go/aws/lambda/integration.toml: [smoke] imports entry {package!r} must be a package in "
+        "'go.temporal.io/worker-integrations/aws/lambda'"
+    ]
+
+
+@pytest.mark.parametrize("files", [[], ["client_test.go"]])
+def test_go_smoke_imports_must_have_go_files(repo: Path, files: list[str]) -> None:
+    # A missing folder, or one with only tests, isn't a package anyone can import
+    d = make_go_package(repo)
+    for name in files:
+        add_go_file(d, "client", name)
+    add_smoke_imports(d, "go.temporal.io/worker-integrations/aws/lambda/client")
+    assert run_checker(repo) == [
+        "go/aws/lambda/integration.toml: [smoke] imports entry 'go.temporal.io/worker-integrations/aws/lambda/client' "
+        "has no package: go/aws/lambda/client has no Go files other than tests"
+    ]
+
+
+@pytest.mark.parametrize("folder", ["otel", "otel/testing"])
+def test_go_smoke_imports_must_not_be_in_nested_modules(repo: Path, folder: str) -> None:
+    d = make_go_package(repo)
+    make_go_package(repo, "go.temporal.io/worker-integrations/aws/lambda/otel")
+    add_go_file(d, folder)
+    add_smoke_imports(d, f"go.temporal.io/worker-integrations/aws/lambda/{folder}")
+    assert run_checker(repo) == [
+        f"go/aws/lambda/integration.toml: [smoke] imports entry 'go.temporal.io/worker-integrations/aws/lambda/{folder}' "
+        "is in the nested module go/aws/lambda/otel, not in 'go.temporal.io/worker-integrations/aws/lambda'"
+    ]
 
 
 @pytest.mark.parametrize("replace", [
