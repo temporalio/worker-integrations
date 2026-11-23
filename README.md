@@ -33,7 +33,7 @@ structure to the extent possible.
 
 In all languages except Go, each distributed package is a direct subdirectory of the language,
 `<language>/<package>/`. In Go, directory structure instead mirrors package import paths, so a
-package with path `go.temporal.io/workerintegrations/a/b/c` is defined within `go/a/b/c`.
+package with path `go.temporal.io/worker-integrations/a/b/c` is defined within `go/a/b/c`.
 
 Every package includes a typical language-native manifest file, alongside a custom file called
 `integration.toml`, which defines some extra metadata used by repository tooling (see
