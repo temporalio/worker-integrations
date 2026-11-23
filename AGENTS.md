@@ -264,7 +264,8 @@ change the template, keep `go/_template/` and `scripts/lib/languages/go.py` in s
   `protobufjs` as peers, so packages declare them as peer and dev dependencies, as the template
   does. No `workspace:`, `file:`, `link:` or `portal:` dependencies. `pnpm-workspace.yaml` sets a
   two-week supply-chain cooldown (`minimumReleaseAge`) that exempts `@temporalio/*`, so a new SDK
-  release can be adopted the day it ships.
+  release can be adopted the day it ships. Keep lower bounds honest: CI also tests with the lowest
+  versions they allow (see **CI**).
 - **Dependency modes:** the `DEPS` make variable selects what `make sync` installs: `locked`
   (default) is the committed `pnpm-lock.yaml`, `lowest` re-locks with pnpm's `lowest-direct`
   resolution, and `latest` re-locks to the newest allowed versions. Both rewrite only the lockfile,
@@ -281,6 +282,15 @@ change the template, keep `go/_template/` and `scripts/lib/languages/go.py` in s
   configs are `typescript/.oxlintrc.json` and `typescript/.oxfmtrc.json` instead, since those tools
   (and their editor extensions) find a config only under its standard name, in the current folder
   or a parent; that way plain `pnpm exec oxlint` and `pnpm exec oxfmt` work in any package.
+- **Smoke test:** CI installs the built tarball with `npm install` into new, empty projects and
+  loads the package's entry points with both `require()` and `import()`. Optional peer
+  dependencies (`peerDependenciesMeta`) are features users opt into, since npm never installs them
+  on its own: the first install leaves them out and loads `root-api` and `integration.toml`'s
+  `[smoke] imports`, which must work without them; if there are any, a second install adds them
+  and loads every subpath in `exports` (without any, the first install loads every subpath). List
+  subpath exports that must work without optional peers in `[smoke] imports`. `exports` subpaths
+  are listed explicitly: patterns such as `./*` aren't allowed, since the smoke test couldn't load
+  them.
 
 ### Adding a TypeScript package
 
@@ -327,7 +337,10 @@ other dependencies and run `pnpm install` (which creates `pnpm-lock.yaml`; commi
   cells), the Python workflow also runs `make build`, checks the wheel with
   `scripts/ci/python/check_wheel.py`, and smoke-tests the wheel and sdist in clean environments with
   `scripts/ci/python/smoke.py`. The wheel check also checks that both distributions have the
-  expected version: `0.0.0`, or the release version. Go has no distributions, so the Go workflow
+  expected version: `0.0.0`, or the release version. The TypeScript workflow likewise runs
+  `make build`, checks the tarball with `scripts/ci/typescript/check_tarball.py` (its name and
+  version, `LICENSE`, no tests, every entry point, and `lib/` matching `src/`), and smoke-tests it
+  with `scripts/ci/typescript/smoke.py`. Go has no distributions, so the Go workflow
   ignores the matrix's `build` flag; it runs the tests with the race detector in every cell, and
   sets `GOTOOLCHAIN=local`, so each cell tests the Go version it installed.
 - Each language has one release dry-run workflow (e.g. `release-python-dry-run.yml`), dispatched

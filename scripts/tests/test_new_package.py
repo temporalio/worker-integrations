@@ -63,4 +63,4 @@ def test_an_invalid_name_in_any_language_writes_nothing(repo: Path, invalid: str
     with pytest.raises(ValueError):
         new_package.scaffold(repo, names, "x", "pre-release")
     for language in names:
-        assert sorted(p.name for p in (repo / language).iterdir()) == ["_shared", "_template"]
+        assert [p.name for p in (repo / language).iterdir() if not p.name.startswith(("_", "."))] == []
