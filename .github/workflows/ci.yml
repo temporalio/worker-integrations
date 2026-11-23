@@ -8,6 +8,8 @@
 #                   already the lowest allowed; newest allowed dependencies on the nightly schedule)
 #   python       -> _python-package.yml once per changed Python package (locked and lowest
 #                   dependencies; newest allowed dependencies on the nightly schedule)
+#   typescript   -> _typescript-package.yml once per changed TypeScript package (locked and lowest
+#                   dependencies; newest allowed dependencies on the nightly schedule)
 #   nightly-report -> one issue per package failing on the nightly schedule (scripts/ci/nightly_report.py)
 #   ci-status   -> the ONLY required status check; skipped jobs count as success
 name: CI
@@ -44,6 +46,7 @@ jobs:
     outputs:
       go: ${{ steps.detect.outputs.go }}
       python: ${{ steps.detect.outputs.python }}
+      typescript: ${{ steps.detect.outputs.typescript }}
       any: ${{ steps.detect.outputs.any }}
       mode: ${{ steps.detect.outputs.mode }}
     steps:
@@ -78,6 +81,11 @@ jobs:
         with:
           go-version: stable # the Go smoke test's tests build modules with it
           cache: false
+      # The TypeScript tarball check's and smoke test's tests build the template package with pnpm.
+      # They use the runner's preinstalled Node, which only has to meet the template's engines.node.
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          package_json_file: typescript/_template/package.json.tmpl
       - name: Tooling unit tests
         run: uv run --project scripts --locked pytest scripts/tests -q
 
@@ -133,9 +141,26 @@ jobs:
       # everything else: both locked and lowest deps
       deps: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.latest-deps)) && 'latest' || 'locked lowest' }}
 
+  typescript:
+    name: TypeScript
+    needs: changes
+    if: needs.changes.result == 'success' && needs.changes.outputs.typescript != '[]'
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        package: ${{ fromJson(needs.changes.outputs.typescript) }}
+    uses: ./.github/workflows/_typescript-package.yml
+    with:
+      package: ${{ matrix.package }}
+      # nightly or `latest-deps` dispatch: latest deps only
+      # everything else: both locked and lowest deps
+      deps: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.latest-deps)) && 'latest' || 'locked lowest' }}
+
   nightly-report:
     name: Nightly report
-    needs: [changes, go, python]
+    needs: [changes, go, python, typescript]
     # !cancelled(): report even when package jobs failed, but not on a run someone cancelled
     if: ${{ !cancelled() && github.event_name == 'schedule' && needs.changes.result == 'success' }}
     # Queue reports (e.g. from a re-run of an old nightly) so that two can't open duplicate issues
@@ -159,7 +184,7 @@ jobs:
 
   ci-status:
     name: ci-status
-    needs: [changes, tooling, conventions, go, python, nightly-report]
+    needs: [changes, tooling, conventions, go, python, typescript, nightly-report]
     if: always()
     runs-on: ubuntu-latest
     permissions: {}

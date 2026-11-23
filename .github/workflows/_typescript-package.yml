@@ -1,0 +1,97 @@
+# Reusable workflow for ONE TypeScript package, called by ci.yml once per changed package.
+# Package-specific behavior is data (typescript/<package>/integration.toml, package.json, Makefile);
+# never edit this file for package-specific things.
+name: TypeScript package
+
+on:
+  workflow_call:
+    inputs:
+      package:
+        description: Package folder name under typescript/ (e.g. aws-lambda-worker)
+        type: string
+        required: true
+      deps:
+        description: Space-separated dependency modes for the matrix (locked, lowest, latest; see scripts/ci/matrix.py)
+        type: string
+        required: true
+
+permissions: {}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  matrix:
+    name: matrix
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version-file: scripts/pyproject.toml
+      - id: matrix
+        env:
+          PACKAGE: ${{ inputs.package }}
+          DEPS: ${{ inputs.deps }}
+        # $DEPS is deliberately unquoted so that each mode becomes one argument; matrix.py rejects unknown modes.
+        run: uv run --project scripts --locked python scripts/ci/matrix.py --package-dir "typescript/$PACKAGE" --deps $DEPS --github-output "$GITHUB_OUTPUT"
+
+  test:
+    name: ${{ inputs.package }} (${{ matrix.os }}, node${{ matrix.runtime }}, ${{ matrix.deps }})
+    needs: matrix
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.matrix.outputs.matrix) }}
+    env:
+      PACKAGE_DIR: typescript/${{ inputs.package }} # run steps `cd` here; never interpolate inputs into run blocks
+      DEPS: ${{ matrix.deps }} # read by every make target (typescript/_shared/typescript.mk)
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Before setup-node, whose pnpm cache needs pnpm. Installs the version in the package's
+      # packageManager field; pnpm 12 is a native executable, so it doesn't run on the cell's Node.
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          package_json_file: typescript/${{ inputs.package }}/package.json
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ matrix.runtime }}
+          check-latest: true # e.g. "26" gets the newest 26.x, not the runner's cached one
+          cache: pnpm
+          cache-dependency-path: typescript/${{ inputs.package }}/pnpm-lock.yaml
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        if: matrix.build
+        with:
+          version-file: scripts/pyproject.toml
+          enable-cache: true
+          cache-dependency-glob: scripts/uv.lock
+      - name: Install GNU make (Windows)
+        if: runner.os == 'Windows'
+        run: choco install make -y --no-progress
+      - name: Sync dependencies
+        run: cd "$PACKAGE_DIR" && make sync
+      - name: Lint and type-check
+        run: cd "$PACKAGE_DIR" && make lint
+      - name: Test
+        run: cd "$PACKAGE_DIR" && make test
+      - name: Build tarball
+        if: matrix.build
+        run: cd "$PACKAGE_DIR" && make build
+      - name: Verify tarball
+        if: matrix.build
+        run: uv run --project scripts --locked python scripts/ci/typescript/check_tarball.py --package-dir "$PACKAGE_DIR"
+      - name: Smoke-test tarball
+        if: matrix.build
+        run: uv run --project scripts --locked python scripts/ci/typescript/smoke.py --package-dir "$PACKAGE_DIR"

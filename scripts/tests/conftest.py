@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import io
 import shutil
 import subprocess
+import tarfile
 from pathlib import Path
 
 import pytest
@@ -65,12 +67,19 @@ def make_package(root: Path, language: str, name: str) -> Path:
 def copy_language_support(root: Path, language: str) -> None:
     """Copy what scaffolding and checking `language`'s packages need into `root`.
 
-    That's this repository's <language>/_shared and <language>/_template, LICENSE, and
-    scripts/pyproject.toml (whose uv version Python packages must match).
+    That's this repository's shared files and folders under <language>/ (those starting with `_` or
+    `.`, e.g. _shared and _template), LICENSE, and scripts/pyproject.toml (whose uv version Python
+    packages must match).
     """
-    for rel in (f"{language}/_shared", f"{language}/_template"):
-        if not (root / rel).exists():
-            shutil.copytree(REPO / rel, root / rel)
+    for src in sorted((REPO / language).iterdir()):
+        dest = root / language / src.name
+        if not src.name.startswith(("_", ".")) or dest.exists():
+            continue
+        if src.is_dir():
+            shutil.copytree(src, dest)
+        else:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy(src, dest)
     (root / "scripts").mkdir(exist_ok=True)
     shutil.copy(REPO / "scripts" / "pyproject.toml", root / "scripts" / "pyproject.toml")
     shutil.copy(REPO / "LICENSE", root / "LICENSE")
@@ -125,6 +134,44 @@ def build_python_package(d: Path) -> Path:
     return d / "dist"
 
 
+def build_typescript_package(d: Path) -> Path:
+    """Install the package's dependencies and pack its tarball into dist/, as CI does, and return dist/.
+
+    Drops make_typescript_package's stand-in lockfile, so `make sync` resolves and writes a real one.
+    """
+    (d / "pnpm-lock.yaml").unlink(missing_ok=True)
+    for target in ("sync", "build"):
+        subprocess.run(["make", target], cwd=d, check=True, capture_output=True)
+    return d / "dist"
+
+
+def copy_typescript_package(built: Path, dest: Path, changes: dict[str, bytes | None] | None = None) -> Path:
+    """A copy of the built TypeScript package in `dest`, without node_modules.
+
+    `changes` rewrites the copy's tarball: each named file (relative to the tarball's package/
+    folder) is set to the bytes, or dropped if None.
+    """
+    d = Path(shutil.copytree(built, dest / built.name, ignore=shutil.ignore_patterns("node_modules")))
+    if changes:
+        (tarball,) = (d / "dist").glob("*.tgz")
+        with tarfile.open(tarball, "r:gz") as tar:
+            files = {
+                m.name.removeprefix("package/"): f.read()
+                for m in tar.getmembers() if m.isfile() and (f := tar.extractfile(m))
+            }
+        for name, data in changes.items():
+            if data is None:
+                files.pop(name, None)
+            else:
+                files[name] = data
+        with tarfile.open(tarball, "w:gz") as tar:
+            for name, data in sorted(files.items()):
+                info = tarfile.TarInfo(f"package/{name}")
+                info.size = len(data)
+                tar.addfile(info, io.BytesIO(data))
+    return d
+
+
 @pytest.fixture
 def repo(tmp_path: Path) -> Path:
     return init_repo(tmp_path / "repo")
@@ -135,4 +182,18 @@ def built(tmp_path_factory: pytest.TempPathFactory) -> Path:
     """A freshly scaffolded Python package, built with build_python_package. Copy it before changing it."""
     d = make_python_package(init_repo(tmp_path_factory.mktemp("built") / "repo"))
     build_python_package(d)
+    return d
+
+
+@pytest.fixture(scope="session")
+def built_typescript(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """A freshly scaffolded TypeScript package, built with build_typescript_package. Copy it before changing it.
+
+    Skips the tests that use it where the tools to build and smoke-test a package aren't installed.
+    """
+    missing = [tool for tool in ("pnpm", "node", "npm", "make") if shutil.which(tool) is None]
+    if missing:
+        pytest.skip(f"needs {', '.join(missing)}")
+    d = make_typescript_package(init_repo(tmp_path_factory.mktemp("built_typescript") / "repo"))
+    build_typescript_package(d)
     return d

@@ -110,6 +110,16 @@ def test_typescript_smoke_imports_must_be_exported(repo: Path) -> None:
     ]
 
 
+@pytest.mark.parametrize("subpath", ["./*", "./otel/*", "./*.js"])
+def test_typescript_exports_patterns_are_rejected(repo: Path, subpath: str) -> None:
+    d = make_typescript_package(repo)
+    edit_package_json(d, lambda m: m["exports"].update({subpath: "./lib/*.js"}))
+    assert run_checker(repo) == [
+        f"typescript/aws-lambda-worker/package.json: exports subpath {subpath!r} is a pattern; "
+        "list each subpath explicitly"
+    ]
+
+
 def test_typescript_package_json_must_parse(repo: Path) -> None:
     d = make_typescript_package(repo)
     (d / "package.json").write_text("{")
@@ -218,7 +228,7 @@ def test_typescript_new_package_rejects_invalid_names(repo: Path, name: str) -> 
     with pytest.raises(ValueError, match="npm package name must be @temporalio/<name>"):
         new_package.scaffold(repo, {"typescript": name}, "x", "pre-release")
     assert new_package.main(["--typescript", name, "--description", "x", "--repo-root", str(repo)]) == 1
-    assert sorted(p.name for p in (repo / "typescript").iterdir()) == ["_shared", "_template"]
+    assert [p.name for p in (repo / "typescript").iterdir() if not p.name.startswith(("_", "."))] == []
 
 
 def test_typescript_new_package_has_no_published_name_override(repo: Path) -> None:

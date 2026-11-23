@@ -24,7 +24,7 @@ import subprocess
 import sys
 
 # ci.yml job name -> language root. test_nightly_report.py checks these against ci.yml.
-GITHUB_JOB_LANGUAGES = {"Go": "go", "Python": "python"}
+GITHUB_JOB_LANGUAGES = {"Go": "go", "Python": "python", "TypeScript": "typescript"}
 # GitHub names a reusable workflow's jobs `<caller job name> (<matrix values>) / <called job name>`, e.g.
 # `Python (aws_lambda_worker) / aws_lambda_worker (ubuntu-latest, py3.14, latest)`, where job=Python
 # and package=aws_lambda_worker.

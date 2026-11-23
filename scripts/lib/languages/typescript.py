@@ -210,6 +210,13 @@ def _check_package_json(ctx: CheckContext, package: Package, meta: IntegrationMe
     if not isinstance(exports, dict) or "." not in exports:
         ctx.fail(f'{rel}: exports must be an object with a "." entry')
     else:
+        # The smoke test imports every subpath export (scripts/ci/typescript/smoke.py), so each must
+        # be spelled out, because a pattern such as "./*" names no subpath it could import. Our
+        # packages have few entry points, so listing them costs little. If a package ever needs a
+        # pattern, allow it here and have the smoke test skip it (or import its expansions).
+        for subpath in exports:
+            if "*" in subpath:
+                ctx.fail(f"{rel}: exports subpath {subpath!r} is a pattern; list each subpath explicitly")
         for import_path in meta.smoke_imports:
             subpath = "." + import_path.removeprefix(meta.published_name)
             if import_path.startswith(f"{meta.published_name}/") and subpath not in exports:
