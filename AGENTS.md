@@ -38,8 +38,9 @@ conventions:
   after the package (e.g. `python/aws_lambda_worker/`). Import-path nesting belongs inside the
   package's own source tree, not in the repository layout.
 
-Directories under a language root that start with `_` or `.` (e.g. `_shared/`, `_template/`) hold
-shared configuration and templates, and never contain packages; neither do `testdata/` folders.
+Directories and files under a language root that start with `_` or `.` (e.g. `_shared/`,
+`_template/`, `typescript/.oxlintrc.json`) hold shared configuration and templates, and never
+contain packages; neither do `testdata/` folders.
 
 Each package folder contains its native manifest and lockfile (if relevant for the language), a
 `README.md`, a copy of the root `LICENSE`, and an `integration.toml` metadata file.
@@ -224,6 +225,80 @@ directive, `make lint` and `make test`, and request the module's vanity import p
 `go.temporal.io/sdk` version that `go.mod` requires is the module's supported minimum. If you
 change the template, keep `go/_template/` and `scripts/lib/languages/go.py` in sync.
 
+## TypeScript conventions
+
+- **Names:** every package's npm name (`published-name` in `integration.toml`) is
+  `@temporalio/<name>`, where `<name>` is lowercase letters and digits in `-`-separated words,
+  starting with a letter. Its folder is `<name>`, e.g. `@temporalio/aws-lambda-worker` lives in
+  `typescript/aws-lambda-worker/`, so there's no published-name override. `root-api` is the npm
+  name too, and `[smoke] imports` entries are its subpath exports (e.g.
+  `@temporalio/aws-lambda-worker/otel`), each of which must be in `package.json`'s `exports`.
+  Nothing checks names published from other repositories (including the SDK's own `@temporalio/*`
+  packages), so before a package's first release, check that its name isn't already on npm.
+- **Name choice:** prefer `@temporalio/<provider>-<product>-worker` for worker packages, matching
+  the Python published name without `temporalio-`. Packages that moved here from an SDK repository
+  keep their existing names (e.g. `@temporalio/lambda-worker`).
+- **Layout:** the package folder contains `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`,
+  `tsconfig.json`, `integration.toml`, `Makefile`, `README.md`, `LICENSE`, and its source under
+  `src/`, with tests in `src/__tests__/` named `*.test.ts`. `tsc` compiles `src/` into `lib/`;
+  the published tarball has `src/` and `lib/` without the tests.
+- **Independent projects:** each package is its own pnpm project with its own lockfile;
+  `pnpm-workspace.yaml` makes the package folder its workspace root and holds its pnpm settings.
+  There's no repository-wide workspace. pnpm refuses to install until each dependency's install
+  script is allowed or denied in `allowBuilds`: allow only scripts a dependency needs to work
+  (e.g. to build or download a native binary), and say why in a comment, as the template does for
+  the SDK's dependencies.
+- **package.json:** `version` stays `0.0.0`; release tags supply the published version.
+  `engines.node` is exactly `>=` the first `[ci] runtime-versions` entry, which is the exact
+  minimum supported Node version (e.g. `22.12.0`); the last entry is a major version (e.g. `26`).
+  `repository` points at this repository with the package's folder as `directory` (npm provenance
+  requires the URL to match), `files` includes `LICENSE`, and `packageManager` is the pnpm version
+  `typescript/_template/package.json.tmpl` pins.
+- **Release versions** are `X.Y.Z`, or `X.Y.Z` followed by `-alpha.<N>`, `-beta.<N>` or `-rc.<N>`
+  (e.g. `0.1.0-rc.1`).
+- **Dependencies:** depend on `@temporalio/*` packages (in `dependencies`, `peerDependencies` and
+  `optionalDependencies`) with a caret range on the minimum supported version, e.g.
+  `"@temporalio/worker": "^1.24.0"`, and state the same range in the README's Compatibility
+  section. `pnpm add` would save a caret range on the newest version instead, so write the range
+  with `pnpm pkg set` (or by hand), then run `pnpm install`. The SDK's packages need `long` and
+  `protobufjs` as peers, so packages declare them as peer and dev dependencies, as the template
+  does. No `workspace:`, `file:`, `link:` or `portal:` dependencies. `pnpm-workspace.yaml` sets a
+  two-week supply-chain cooldown (`minimumReleaseAge`) that exempts `@temporalio/*`, so a new SDK
+  release can be adopted the day it ships.
+- **Dependency modes:** the `DEPS` make variable selects what `make sync` installs: `locked`
+  (default) is the committed `pnpm-lock.yaml`, `lowest` re-locks with pnpm's `lowest-direct`
+  resolution, and `latest` re-locks to the newest allowed versions. Both rewrite only the lockfile,
+  never `package.json`; never commit the result, and restore it with `git checkout pnpm-lock.yaml`.
+  `make sync` installs the lockfile exactly, so after changing dependencies run `pnpm install` to
+  update it.
+- **Tooling:** `tsc` (TypeScript 7) type-checks and compiles, `oxfmt` checks formatting, and
+  `oxlint` lints with type-aware rules (e.g. `no-floating-promises`), following sdk-typescript;
+  tests use AVA 6, configured in each `package.json` (with `workerThreads: false`, as in
+  sdk-typescript's and ai-integrations' AVA configs). All of them run through `make lint`,
+  `make test` and `make build` (`make help` lists every target). `typescript/_shared/` holds the
+  make targets and the shared `tsconfig`; a package's `Makefile` is exactly one line that includes
+  `typescript.mk`, and its `tsconfig.json` extends `tsconfig.base.json`. The `oxlint` and `oxfmt`
+  configs are `typescript/.oxlintrc.json` and `typescript/.oxfmtrc.json` instead, since those tools
+  (and their editor extensions) find a config only under its standard name, in the current folder
+  or a parent; that way plain `pnpm exec oxlint` and `pnpm exec oxfmt` work in any package.
+
+### Adding a TypeScript package
+
+```bash
+uv run --project scripts --locked python scripts/new_package.py \
+    --typescript @temporalio/aws-lambda-worker \
+    --description "Temporal worker integration for AWS Lambda" \
+    --maturity public-preview
+```
+
+This creates `typescript/aws-lambda-worker/` from `typescript/_template/` and copies the root
+`LICENSE`. The folder follows the npm name, so there's no `--typescript-published-name`. The
+script then prints the remaining steps: check that the name isn't already on npm, set the real
+minimum SDK version (a caret range in `package.json`, and the same range in the README), add
+other dependencies and run `pnpm install` (which creates `pnpm-lock.yaml`; commit it),
+`make lint` and `make test`. If you change the template, keep `typescript/_template/` and
+`scripts/lib/languages/typescript.py` in sync.
+
 ## CI
 
 - [`.github/workflows/ci.yml`](.github/workflows/ci.yml) is the single CI entry point.
@@ -282,9 +357,11 @@ change the template, keep `go/_template/` and `scripts/lib/languages/go.py` in s
 - Pin every third-party action to a full commit SHA with a `# vX.Y.Z` comment.
 - Repository tooling lives in `scripts/`, a standalone uv project: CI entry points in
   `scripts/ci/` (those that only one language's workflow runs in `scripts/ci/<language>/`),
-  shared code in the `scripts/lib/` package (stdlib only, since `detect_changes.py` runs before
-  uv is installed). Entry scripts put `scripts/` on `sys.path` and import `lib.*`. Run its tests
-  with `uv run --project scripts --locked pytest scripts/tests -q`.
+  shared code in the `scripts/lib/` package. CI runs `detect_changes.py` and `nightly_report.py`
+  with the runner's system `python3`, before uv is installed, so they and what they import
+  (`lib/common.py`) must use only the standard library; everything else runs through `uv run`
+  and can use the project's dependencies. Entry scripts put `scripts/` on `sys.path` and import
+  `lib.*`. Run its tests with `uv run --project scripts --locked pytest scripts/tests -q`.
 - Each language's tooling rules (naming, conventions checks, scaffolding, release versions and
   registry lookups) live in one module, `scripts/lib/languages/<language>.py`, as a subclass of
   `Language` (`_base.py`) registered in `TOOLED_LANGUAGES`. Adding tooling for a language means

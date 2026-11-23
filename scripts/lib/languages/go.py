@@ -24,7 +24,7 @@ import urllib.request
 from lib.common import Package
 from lib.integration_toml import IntegrationMeta
 from lib.languages._base import CheckContext, Language
-from lib.release_version import ReleaseVersion
+from lib.release_version import ReleaseVersion, parse_semver_release
 
 MODULE_PREFIX = "go.temporal.io/worker-integrations/"
 # One element of the folder path below the prefix: lowercase letters and digits, starting with a
@@ -35,12 +35,6 @@ PATH_ELEMENT_RE = re.compile(r"[a-z][a-z0-9]*")
 # supported yet.
 MAJOR_VERSION_ELEMENT_RE = re.compile(r"v[0-9]+")
 REQUIRED_FILES = ("go.mod", "go.sum", "Makefile", "README.md")
-# One number in a version (e.g. the 2 in 1.2.3 or in 1.0.0-rc.2), without leading zeros
-VERSION_NUMBER_PATTERN = r"(?:0|[1-9][0-9]*)"
-RELEASE_VERSION_RE = re.compile(
-    rf"(?P<release>{VERSION_NUMBER_PATTERN}\.{VERSION_NUMBER_PATTERN}\.{VERSION_NUMBER_PATTERN})"
-    rf"(?:-(?P<phase>alpha|beta|rc)\.(?P<number>{VERSION_NUMBER_PATTERN}))?"
-)
 # go.mod directives this module reads: `module <path>` and `go <version>`, each on its own line.
 GO_MOD_DIRECTIVE_RE = re.compile(r"^(module|go)\s+(\S+)\s*$", re.MULTILINE)
 # A `replace` directive, on its own line or opening a `replace (...)` block.
@@ -140,20 +134,19 @@ class Go(Language):
 
     # -- releases --------------------------------------------------------------------------------
     def release_version(self, text: str) -> ReleaseVersion:
-        m = RELEASE_VERSION_RE.fullmatch(text)
-        if not m:
+        version = parse_semver_release(text)
+        if version is None:
             raise ValueError(
                 f"{text!r} isn't a supported Go version: use X.Y.Z, or X.Y.Z followed by a pre-release "
                 "-alpha.<N>, -beta.<N> or -rc.<N> (e.g. 1.0.0-rc.1)"
             )
-        major, minor, patch = (int(n) for n in m["release"].split("."))
+        major = version.release[0]
         if major >= 2:
             raise ValueError(
                 f"{text!r} isn't a supported Go version: major versions 2 and up need a /v{major} "
                 "module path, which isn't supported"
             )
-        pre = (m["phase"], int(m["number"])) if m["phase"] else None
-        return ReleaseVersion((major, minor, patch), pre, text)
+        return version
 
     def published_versions(self, published_name: str) -> list[str]:
         # The module proxy lists every version it has fetched, retracted ones included. Module paths

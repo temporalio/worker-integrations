@@ -1,0 +1,66 @@
+{
+  "name": "__PUBLISHED_NAME__",
+  "version": "0.0.0",
+  "description": "__DESCRIPTION__",
+  "keywords": [
+    "temporal",
+    "worker"
+  ],
+  "homepage": "https://github.com/temporalio/worker-integrations/tree/main/typescript/__NAME__",
+  "bugs": {
+    "url": "https://github.com/temporalio/worker-integrations/issues"
+  },
+  "license": "MIT",
+  "author": "Temporal Technologies Inc. <compute-rnd-team@temporal.io>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/temporalio/worker-integrations.git",
+    "directory": "typescript/__NAME__"
+  },
+  "main": "./lib/index.js",
+  "types": "./lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src",
+    "lib",
+    "!src/__tests__",
+    "!lib/__tests__",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@temporalio/worker": "^1.26.0"
+  },
+  "peerDependencies": {
+    "long": "^5.3.2",
+    "protobufjs": "^8.7.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "ava": "^6.4.1",
+    "long": "^5.3.2",
+    "oxfmt": "0.77.0",
+    "oxlint": "1.92.0",
+    "oxlint-tsgolint": "7.0.2006",
+    "protobufjs": "^8.7.1",
+    "typescript": "~7.0.2"
+  },
+  "ava": {
+    "files": [
+      "lib/**/*.test.js"
+    ],
+    "workerThreads": false
+  },
+  "packageManager": "pnpm@12.18.0"
+}

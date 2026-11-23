@@ -9,5 +9,6 @@ from __future__ import annotations
 from lib.languages._base import Language
 from lib.languages.go import Go
 from lib.languages.python import Python
+from lib.languages.typescript import TypeScript
 
-TOOLED_LANGUAGES: dict[str, Language] = {language.name: language for language in (Go(), Python())}
+TOOLED_LANGUAGES: dict[str, Language] = {language.name: language for language in (Go(), Python(), TypeScript())}

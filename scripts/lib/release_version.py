@@ -6,10 +6,19 @@ Each language parses its registry's own spelling (e.g. Python's `1.0.0rc1`) with
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from functools import total_ordering
 
 PRE_RELEASE_PHASES = ("alpha", "beta", "rc")
+# One number in a version (e.g. the 2 in 1.2.3 or in 1.0.0-rc.2), without leading zeros
+VERSION_NUMBER_PATTERN = r"(?:0|[1-9][0-9]*)"
+# The SemVer versions we release where registries use SemVer (Go, npm): `X.Y.Z`, optionally
+# followed by a pre-release -alpha.<N>, -beta.<N> or -rc.<N>
+SEMVER_RELEASE_RE = re.compile(
+    rf"(?P<release>{VERSION_NUMBER_PATTERN}\.{VERSION_NUMBER_PATTERN}\.{VERSION_NUMBER_PATTERN})"
+    rf"(?:-(?P<phase>alpha|beta|rc)\.(?P<number>{VERSION_NUMBER_PATTERN}))?"
+)
 
 
 @total_ordering
@@ -41,3 +50,13 @@ class ReleaseVersion:
         if self.pre is None:
             return (self.release, True, 0, 0)
         return (self.release, False, PRE_RELEASE_PHASES.index(self.pre[0]), self.pre[1])
+
+
+def parse_semver_release(text: str) -> ReleaseVersion | None:
+    """Parse a version matching SEMVER_RELEASE_RE, or return None if it doesn't match."""
+    m = SEMVER_RELEASE_RE.fullmatch(text)
+    if not m:
+        return None
+    major, minor, patch = (int(n) for n in m["release"].split("."))
+    pre = (m["phase"], int(m["number"])) if m["phase"] else None
+    return ReleaseVersion((major, minor, patch), pre, text)

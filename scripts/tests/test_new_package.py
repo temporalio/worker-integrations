@@ -14,6 +14,7 @@ from lib.languages import TOOLED_LANGUAGES
 EXAMPLES = {
     "go": ("go.temporal.io/worker-integrations/aws/lambda", "go.sum"),
     "python": ("temporalio.worker_integrations.aws.lambda_worker", "uv.lock"),
+    "typescript": ("@temporalio/aws-lambda-worker", "pnpm-lock.yaml"),
 }
 
 
