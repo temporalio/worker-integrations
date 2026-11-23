@@ -36,6 +36,7 @@ SCOPE = "@temporalio/"
 # starting with `_` or `.`).
 UNSCOPED_NAME_RE = re.compile(r"[a-z][a-z0-9]*(-[a-z0-9]+)*")
 DEVELOPMENT_VERSION = "0.0.0"
+REGISTRY_URL = "https://registry.npmjs.org"
 REPOSITORY_URL = "git+https://github.com/temporalio/worker-integrations.git"
 REQUIRED_FILES = ("package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "tsconfig.json", "Makefile", "README.md")
 # Dependency tables in package.json, and the specs that point at local code instead of a published version
@@ -70,7 +71,28 @@ class TypeScript(Language):
        pnpm pkg set 'dependencies["@temporalio/worker"]=^<version>'   # an older minimum (pnpm add can't)
        pnpm add <package>   # the newest version, as a caret range
        pnpm install         # commit the pnpm-lock.yaml it creates
-  3. make lint && make test"""
+  3. make lint && make test
+  4. Before the package's first release, set it up on npm. If the package already exists on npm
+     (see 1), ask someone who can publish @temporalio packages to run only the `npm trust` command
+     in b, then release within 2 days of `npm trust` (see d). A new package needs more steps. npm
+     can only set up trusted publishing for a package that exists, so a new package's first
+     version must be published by hand, from the release dry run's tested tarball:
+     a. Run the release dry run (see README.md's release steps) for a pre-release of the
+        package's first version, e.g. typescript/{folder}/v0.1.0-rc.1 for a public-preview package.
+     b. Within 7 days of the dry run (GitHub keeps its tarball that long), and once the next
+        version is ready to follow within 2 days (see d), ask someone who can publish @temporalio
+        packages to download the tarball, publish it, and set up the trusted publisher, with npm
+        11.15.0 or newer:
+          gh run download <dry run's run ID> -R temporalio/worker-integrations -n dist-{folder}
+          npm publish <the tarball>.tgz --access public --tag next --ignore-scripts
+          npm trust github {published_name} --repo temporalio/worker-integrations --file release-typescript.yml --env npm --allow-publish
+     c. Publish the GitHub release for that version on the dry run's tested commit, as usual. The
+        release workflow finds the version on npm, checks it's exactly the tested tarball, and
+        skips the upload.
+     d. Release the next version (another pre-release, or the final version) within 2 days of
+        `npm trust`. npm drops a new trusted publisher that hasn't published within 2 days, and
+        it would then have to be deleted and set up again. If the next version isn't ready, release
+        another pre-release."""
 
     # -- scaffolding -----------------------------------------------------------------------------
     def package_folder(self, requested: str, published_name: str) -> str:
@@ -152,21 +174,38 @@ class TypeScript(Language):
         # The packument's `time` maps every version ever published to its publish time, including
         # versions that were later unpublished (which npm never lets anyone reuse), alongside the
         # `created` and `modified` keys. If the whole package was unpublished, `time.unpublished`
-        # lists its versions instead. Any error other than a 404 propagates, so that a registry
-        # outage fails the release instead of looking like an unpublished package.
-        url = f"https://registry.npmjs.org/{published_name.replace('/', '%2f')}"
-        try:
-            with urllib.request.urlopen(url, timeout=30) as response:
-                packument = json.load(response)
-        except urllib.error.HTTPError as exc:
-            if exc.code == 404:
-                return []
-            raise
+        # lists its versions instead.
+        packument = fetch_packument(published_name)
+        if packument is None:
+            return []
         time = packument.get("time", {})
         versions = set(packument.get("versions", {}))
         versions |= {key for key in time if key not in ("created", "modified", "unpublished")}
         versions |= set(time.get("unpublished", {}).get("versions", []))
         return sorted(versions)
+
+    def may_already_be_published(self, version: ReleaseVersion, published: list[ReleaseVersion]) -> bool:
+        # npm can only set up trusted publishing for a package that already exists, so a maintainer
+        # publishes a new package's first version by hand, from the dry run's tested tarball (see
+        # next_steps). The release workflow's publish job then checks that npm has exactly the
+        # tested bytes, instead of uploading.
+        return published == [version]
+
+
+def fetch_packument(published_name: str) -> dict[str, Any] | None:
+    """npm's metadata for a package (its "packument"), or None if npm has never had the package.
+
+    Any error other than a 404 propagates, so that a registry outage fails a release instead of
+    looking like an unpublished package.
+    """
+    url = f"{REGISTRY_URL}/{published_name.replace('/', '%2f')}"
+    try:
+        with urllib.request.urlopen(url, timeout=30) as response:
+            return json.load(response)
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            return None
+        raise
 
 
 def _check_package_json(ctx: CheckContext, package: Package, meta: IntegrationMeta, manifest: dict[str, Any]) -> None:

@@ -1,0 +1,157 @@
+# Release workflow for ONE TypeScript package, started by publishing its GitHub release (tag
+# typescript/<package>/v<version>, e.g. typescript/aws-lambda-worker/v0.1.0). It has no manual
+# trigger: dispatch release-typescript-dry-run.yml to try a release without publishing anything.
+#
+#   dry-run    -> release-typescript-dry-run.yml for the tag: checks, tests, and builds the npm
+#                 tarball into the run's dist-<package> artifact
+#   verify     -> checks that only apply to a real release: the tag is on main, and the GitHub
+#                 release's pre-release flag is right
+#   publish    -> uploads the artifact to npm, unless npm already has the version with exactly
+#                 its bytes (scripts/ci/typescript/check_published.py)
+#   verify-npm -> waits for npm to list the version, checks that it has exactly the artifact's
+#                 bytes, and smoke-tests installing it from npm, as a user would
+#
+# Publishing uses npm trusted publishing: npm accepts this workflow's GitHub OIDC token for the
+# package, so there are no stored credentials. npm matches the token to this file's name, so the
+# publish job must be in this file, not in a reusable workflow, and it's the only job that can
+# request a token. It never builds anything: what it uploads is the artifact the dry run tested.
+# npm can only set up trusted publishing for a package that exists, so a new package's first
+# version is published by hand, from its dry run's artifact; the publish job then finds exactly
+# those bytes on npm and skips the upload (see the next steps scripts/new_package.py prints).
+#
+# The npm dist-tag is `next` for a pre-release version (e.g. 0.1.0-rc.1) and `latest` otherwise,
+# so `npm install <package>` never picks up a pre-release.
+#
+# If a job fails, re-run only the failed jobs: on the run's page in GitHub Actions, "Re-run jobs" >
+# "Re-run failed jobs" (or `gh run rerun <run ID> --failed`). The publish job skips an upload that
+# already happened. npm's metadata can take a few minutes to list a new upload, though, so if a
+# re-run's publish step fails because npm already has the version, wait a few minutes and re-run
+# the failed jobs again. Re-running all jobs fails the dry run's check once the version is on npm,
+# since every release must be a new version (except a new package's first version, which is on npm
+# before its release anyway). If this workflow itself needs a fix, merge it and release the next
+# version.
+name: Release (TypeScript)
+
+on:
+  release:
+    types: [published]
+
+permissions: {}
+
+defaults:
+  run:
+    shell: bash
+
+# A second run for the same tag waits for the first, so the two can't race to upload the same
+# version. That shouldn't be possible anyway: the repository has immutable releases enabled, so a
+# tag can't get a second published release. It's per tag rather than one group for every release,
+# since GitHub keeps only one pending run per group and cancels older ones.
+concurrency:
+  group: release-typescript-${{ github.event.release.tag_name }}
+  cancel-in-progress: false
+
+jobs:
+  dry-run:
+    name: Dry run
+    # Release events fire for every language's tags
+    if: startsWith(github.event.release.tag_name, 'typescript/')
+    permissions:
+      contents: read
+    uses: ./.github/workflows/release-typescript-dry-run.yml
+    with:
+      tag: ${{ github.event.release.tag_name }}
+
+  verify:
+    name: Verify release
+    needs: dry-run
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # for origin/main
+          persist-credentials: false
+      - name: The tag is on main
+        run: |
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main \
+            || { echo "::error::release tags must point at a commit on main"; exit 1; }
+      - name: The GitHub release's pre-release flag is right
+        env:
+          EXPECTED: ${{ needs.dry-run.outputs.prerelease }}
+          ACTUAL: ${{ github.event.release.prerelease }}
+        run: |
+          [ "$EXPECTED" = "$ACTUAL" ] \
+            || { echo "::error::the GitHub release's pre-release flag must be $EXPECTED (see check_release.py)"; exit 1; }
+
+  publish:
+    name: Publish to npm
+    needs: [dry-run, verify]
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      contents: read # the checkout, for the scripts that check npm's copy
+      id-token: write # trusted publishing
+    env:
+      PACKAGE_DIR: typescript/${{ needs.dry-run.outputs.package }}
+      VERSION: ${{ needs.dry-run.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version-file: scripts/pyproject.toml
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: lts/* # trusted publishing needs npm 11.5.1 or newer, which every LTS from 24 on bundles
+          check-latest: true
+          registry-url: https://registry.npmjs.org
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dist-${{ needs.dry-run.outputs.package }}
+          path: dist/
+      - name: Check whether npm already has the version
+        id: published
+        run: uv run --project scripts --locked python scripts/ci/typescript/check_published.py --package-dir "$PACKAGE_DIR" --version "$VERSION" --dist dist --github-output "$GITHUB_OUTPUT"
+      - name: Publish to npm
+        if: steps.published.outputs.published == 'false'
+        env:
+          # A hyphen marks a pre-release version (e.g. 0.1.0-rc.1). check_release.py only accepts
+          # X.Y.Z or X.Y.Z-<pre-release>, so a final version never has one.
+          DIST_TAG: ${{ contains(needs.dry-run.outputs.version, '-') && 'next' || 'latest' }}
+        # --ignore-scripts: publishing a tarball needs no lifecycle scripts. npm adds provenance on
+        # its own when it publishes with trusted publishing.
+        run: npm publish dist/*.tgz --access public --tag "$DIST_TAG" --ignore-scripts
+
+  verify-npm:
+    name: Verify on npm
+    needs: [dry-run, publish]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      PACKAGE_DIR: typescript/${{ needs.dry-run.outputs.package }}
+      VERSION: ${{ needs.dry-run.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version-file: scripts/pyproject.toml
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: lts/*
+          check-latest: true
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dist-${{ needs.dry-run.outputs.package }}
+          path: dist/
+      # This check is here rather than after the upload in the publish job, so that it runs without
+      # the publish job's token, and re-running this job after a timeout (npm can take a few
+      # minutes to list a new upload) never tries the upload again.
+      - name: Check that npm has the tested tarball
+        run: uv run --project scripts --locked python scripts/ci/typescript/check_published.py --package-dir "$PACKAGE_DIR" --version "$VERSION" --dist dist --wait
+      - name: Smoke-test installing from npm
+        run: uv run --project scripts --locked python scripts/ci/typescript/smoke.py --package-dir "$PACKAGE_DIR" --registry --version "$VERSION"

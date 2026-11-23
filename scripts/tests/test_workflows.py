@@ -63,8 +63,10 @@ def test_release_dry_run_tests_the_checked_package(language: str) -> None:
     assert jobs["test"]["with"]["package"] == "${{ needs.check.outputs.package }}"
 
 
-def test_release_python_dry_run_builds_the_checked_version() -> None:
-    jobs = yaml.safe_load((REPO / ".github/workflows/release-python-dry-run.yml").read_text())["jobs"]
+@pytest.mark.parametrize("language", ["python", "typescript"])
+def test_release_dry_run_builds_the_checked_version(language: str) -> None:
+    # Languages that publish a built artifact build it with the checked version
+    jobs = yaml.safe_load((REPO / f".github/workflows/release-{language}-dry-run.yml").read_text())["jobs"]
     assert jobs["test"]["with"]["version"] == "${{ needs.check.outputs.version }}"
 
 
@@ -77,9 +79,9 @@ def test_release_only_runs_for_published_releases_of_its_language(language: str)
 
 
 def test_only_the_publish_jobs_can_publish() -> None:
-    # PyPI's trusted publishing needs a job in the publishing workflow itself (not a reusable
-    # workflow) with an OIDC token. No other job gets one, and no job can change the repository or
-    # its releases.
+    # PyPI's and npm's trusted publishing need a job in the publishing workflow itself (not a
+    # reusable workflow) with an OIDC token. No other job gets one, and no job can change the
+    # repository or its releases.
     token_jobs: set[str] = set()
     for path in WORKFLOWS:
         for name, job in yaml.safe_load(path.read_text())["jobs"].items():
@@ -88,8 +90,12 @@ def test_only_the_publish_jobs_can_publish() -> None:
             if permissions.get("id-token") == "write":
                 token_jobs.add(f"{path.name}:{name}")
                 assert "uses" not in job, f"{path.name}: {name}"
-                assert job["environment"] in ("testpypi", "pypi"), f"{path.name}: {name}"
-    assert token_jobs == {"release-python.yml:publish-testpypi", "release-python.yml:publish-pypi"}
+                assert job["environment"] in ("testpypi", "pypi", "npm"), f"{path.name}: {name}"
+    assert token_jobs == {
+        "release-python.yml:publish-testpypi",
+        "release-python.yml:publish-pypi",
+        "release-typescript.yml:publish",
+    }
 
 
 @pytest.mark.parametrize("language", RELEASE_LANGUAGES)

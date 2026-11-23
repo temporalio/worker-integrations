@@ -29,11 +29,6 @@ class Language(ABC):
     """Help for new_package.py's --<name> option: what name it takes."""
     published_name_overridable: ClassVar[bool] = False
     """Whether new_package.py offers --<name>-published-name to override the default published name."""
-    tag_publishes: ClassVar[bool] = False
-    """Whether a release's tag is what publishes it (e.g. Go, whose module proxy serves tagged versions).
-
-    The release workflow then runs after the version is public, so its registry may already list it.
-    """
     next_steps: ClassVar[str]
     """Printed after scaffolding a package with new_package.py.
 
@@ -111,6 +106,24 @@ class Language(ABC):
         Includes versions that can't be installed anymore but can't be reused either (e.g. yanked
         ones). Empty if the package has never been published.
         """
+
+    def may_already_be_published(self, version: ReleaseVersion, published: list[ReleaseVersion]) -> bool:
+        """Whether the registry can legitimately have `version` before its release workflow publishes it.
+
+        check_release.py requires each release to be greater than every published version, so it
+        normally fails if the registry already has the version being released. In some languages,
+        though, a version can be in the registry before or during its own release. For example,
+        publishing a Go release creates its tag, which makes the version public, and a new npm
+        package's first version is published by hand. A language overrides this to return True in
+        those cases. `published` is every version the registry has (including `version`, if it's
+        there), for overrides that depend on what else has been published.
+
+        When this returns True, check_release.py leaves `version` out of the published versions
+        before checking it, but still checks it against every other published version. The
+        language's release workflow must then handle finding the version in the registry, e.g. by
+        checking that the registry has exactly the tested contents instead of uploading them again.
+        """
+        return False
 
 
 def render_template(root: Path, language: str, folder: str, substitutions: dict[str, str]) -> list[Path]:

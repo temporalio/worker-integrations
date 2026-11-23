@@ -1,0 +1,75 @@
+# Release dry run for ONE TypeScript package, selected by its planned release tag
+# (typescript/<package>/v<version>, e.g. typescript/aws-lambda-worker/v0.1.0). Dispatch it on main
+# before creating a release. release-typescript.yml also calls it as the first step of a release.
+# It never publishes or tags anything.
+#
+#   check  -> check the tag and version (scripts/ci/check_release.py)
+#   test   -> _typescript-package.yml for the package with the tag's version injected: the lockfile
+#             matrix, then building and checking the npm tarball, which it saves as the run's
+#             dist-<package> artifact. For a new package, a maintainer publishes that tarball to
+#             npm by hand before the first release (see scripts/new_package.py's next steps).
+name: Release dry run (TypeScript)
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to dry-run, e.g. typescript/aws-lambda-worker/v0.1.0
+        type: string
+        required: true
+  workflow_call:
+    inputs:
+      tag:
+        description: Release tag to dry-run, e.g. typescript/aws-lambda-worker/v0.1.0
+        type: string
+        required: true
+    outputs:
+      package:
+        description: Package folder name under typescript/
+        value: ${{ jobs.check.outputs.package }}
+      version:
+        description: Version to publish, e.g. 0.1.0 (the part of the tag after its "v")
+        value: ${{ jobs.check.outputs.version }}
+      prerelease:
+        description: Whether the GitHub release must be marked as a pre-release ("true" or "false")
+        value: ${{ jobs.check.outputs.prerelease }}
+
+permissions: {}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  check:
+    name: Check release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      package: ${{ steps.check.outputs.package }}
+      version: ${{ steps.check.outputs.version }}
+      prerelease: ${{ steps.check.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version-file: scripts/pyproject.toml
+      - name: Check the tag and version
+        id: check
+        env:
+          TAG: ${{ inputs.tag }}
+        run: uv run --project scripts --locked python scripts/ci/check_release.py --language typescript "$TAG" --github-output "$GITHUB_OUTPUT" --github-step-summary "$GITHUB_STEP_SUMMARY"
+
+  test:
+    name: Test
+    needs: check
+    permissions:
+      contents: read
+    uses: ./.github/workflows/_typescript-package.yml
+    with:
+      package: ${{ needs.check.outputs.package }}
+      deps: locked
+      version: ${{ needs.check.outputs.version }}

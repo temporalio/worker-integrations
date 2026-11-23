@@ -49,7 +49,6 @@ def folder_for(module_path: str) -> str:
 class Go(Language):
     name = "go"
     name_help = f"module path, e.g. {MODULE_PREFIX}aws/lambda"
-    tag_publishes = True
     next_steps = """\
   1. Write the module's code, then add its dependencies, e.g.:
        cd go/{folder}
@@ -161,6 +160,15 @@ class Go(Language):
                 return []
             raise
         return [line.removeprefix("v") for line in text.split()]
+
+    def may_already_be_published(self, version: ReleaseVersion, published: list[ReleaseVersion]) -> bool:
+        # A Go version is published by its tag, and publishing the GitHub release creates the tag.
+        # The module proxy serves any tagged version as soon as someone requests it, so the proxy
+        # may already list the version by the time the release workflow runs (especially on a
+        # re-run). Allowing that is still safe, because each version is released at most once. A tag
+        # has at most one GitHub release, and the tag ruleset and immutable releases keep the tag
+        # from changing.
+        return True
 
 
 def _check_smoke_import(ctx: CheckContext, package: Package, module_path: str, import_path: str) -> None:
