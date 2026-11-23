@@ -105,6 +105,20 @@ def make_python_package(
     return d
 
 
+def make_typescript_package(
+    root: Path, published_name: str = "@temporalio/aws-lambda-worker", maturity: str = "public-preview"
+) -> Path:
+    """Scaffold a TypeScript package in `root` the way a contributor would, plus a stand-in pnpm-lock.yaml.
+
+    The result passes the conventions check exactly as a real package would.
+    """
+    copy_language_support(root, "typescript")
+    scaffold(root, {"typescript": published_name}, f"Fake {published_name} integration", maturity)
+    d = root / "typescript" / TOOLED_LANGUAGES["typescript"].package_folder(published_name, published_name)
+    (d / "pnpm-lock.yaml").write_text("lockfileVersion: '9.0'\n")
+    return d
+
+
 def build_python_package(d: Path) -> Path:
     """Build the package's wheel and sdist into dist/, the way `make build` does, and return dist/."""
     subprocess.run(["uv", "build", "--no-sources", "--out-dir", "dist"], cwd=d, check=True, capture_output=True)

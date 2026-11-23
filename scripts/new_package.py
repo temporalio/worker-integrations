@@ -6,7 +6,8 @@ Usage:
         --description "..." \\
         [--maturity pre-release|public-preview|generally-available] \\
         [--go <module path>] \\
-        [--python <root API> [--python-published-name <name>]]
+        [--python <root API> [--python-published-name <name>]] \\
+        [--typescript <npm name>]
 
 Each language option takes the name that identifies a package in that language, since naming
 styles differ by language; the package's published name derives from it, unless the language
@@ -16,6 +17,8 @@ name. Every requested name is validated before anything is written.
   - Python: the full root API; --python temporalio.worker_integrations.aws.lambda_worker
     creates python/aws_lambda_worker published as temporalio-aws-lambda-worker, and adding
     --python-published-name temporalio-aws-lambda creates python/aws_lambda instead.
+  - TypeScript: the npm name; --typescript @temporalio/aws-lambda-worker creates
+    typescript/aws-lambda-worker.
 
 At least one language option is required. Multiple language options may be passed at once to
 create analogous packages across multiple languages simultaneously; this has the same effect

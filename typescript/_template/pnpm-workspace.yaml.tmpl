@@ -1,0 +1,15 @@
+# Each package is its own pnpm project; this file makes it the workspace root, and holds its settings.
+
+# Supply-chain cooldown: only install versions published at least 2 weeks (in minutes) ago...
+minimumReleaseAge: 20160
+# ...except the SDK, so that a new SDK release can be adopted the day it ships
+minimumReleaseAgeExclude:
+  - '@temporalio/*'
+
+# Dependencies' install scripts. pnpm refuses to install until each one is allowed or denied.
+allowBuilds:
+  # Only checks that its native binary loads, and installs a WebAssembly fallback if it doesn't;
+  # every platform we support has a native binary.
+  '@swc/core': false
+  # Only warns about how dependents spell their version ranges.
+  protobufjs: false

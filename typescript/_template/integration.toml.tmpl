@@ -1,0 +1,13 @@
+# Schema: https://github.com/temporalio/worker-integrations/blob/main/scripts/lib/integration_toml.py
+
+[package]
+published-name = "__PUBLISHED_NAME__"
+root-api = "__PUBLISHED_NAME__"
+maturity = "__MATURITY__"
+
+[ci]
+runtime-versions = ["22.12.0", "26"]
+
+# Subpath exports (in package.json's exports) that users import directly, in addition to the root:
+# [smoke]
+# imports = ["__PUBLISHED_NAME__/testing"]   # e.g. a public testing helpers entry point

@@ -1,0 +1,6 @@
+import test from 'ava';
+import * as root from '..';
+
+test('the root module loads', (t) => {
+  t.is(typeof root, 'object');
+});
