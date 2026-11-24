@@ -14,6 +14,10 @@ on:
         description: Space-separated dependency modes for the matrix (locked, lowest, latest; see scripts/ci/matrix.py)
         type: string
         required: true
+      version:
+        description: Release version to build, e.g. 0.1.0 (release-typescript-dry-run.yml passes it from the tag; empty in ordinary CI, which builds the 0.0.0 placeholder)
+        type: string
+        default: ""
 
 permissions: {}
 
@@ -56,6 +60,7 @@ jobs:
     env:
       PACKAGE_DIR: typescript/${{ inputs.package }} # run steps `cd` here; never interpolate inputs into run blocks
       DEPS: ${{ matrix.deps }} # read by every make target (typescript/_shared/typescript.mk)
+      RELEASE_VERSION: ${{ inputs.version }} # empty outside releases
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -80,6 +85,10 @@ jobs:
       - name: Install GNU make (Windows)
         if: runner.os == 'Windows'
         run: choco install make -y --no-progress
+      - name: Set the release version
+        if: inputs.version != ''
+        # Only package.json: pnpm-lock.yaml doesn't record the package's own version
+        run: cd "$PACKAGE_DIR" && pnpm pkg set version="$RELEASE_VERSION"
       - name: Sync dependencies
         run: cd "$PACKAGE_DIR" && make sync
       - name: Lint and type-check
@@ -91,7 +100,17 @@ jobs:
         run: cd "$PACKAGE_DIR" && make build
       - name: Verify tarball
         if: matrix.build
-        run: uv run --project scripts --locked python scripts/ci/typescript/check_tarball.py --package-dir "$PACKAGE_DIR"
+        run: uv run --project scripts --locked python scripts/ci/typescript/check_tarball.py --package-dir "$PACKAGE_DIR" --version "$RELEASE_VERSION"
       - name: Smoke-test tarball
         if: matrix.build
         run: uv run --project scripts --locked python scripts/ci/typescript/smoke.py --package-dir "$PACKAGE_DIR"
+      - name: Save the tarball for publishing
+        # Only in release builds: release-typescript.yml publishes this exact file
+        if: matrix.build && inputs.version != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dist-${{ inputs.package }}
+          path: typescript/${{ inputs.package }}/dist
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: true # a re-run of this job replaces the artifact instead of failing

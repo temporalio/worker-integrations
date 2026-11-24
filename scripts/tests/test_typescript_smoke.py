@@ -156,3 +156,24 @@ def test_with_optional_peers_only_the_full_install_loads_every_subpath(
         (["spec"], [NAME]),
         (["spec", "@opentelemetry/api@^1.9.0", "zed@^1.0.0"], [NAME, f"{NAME}/otel"]),
     ]
+
+
+def test_registry_installs_the_published_version(
+    built_typescript: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[tuple[str, str]] = []
+    monkeypatch.setattr(smoke, "wait_for_version", lambda name, version: {"version": version})
+    monkeypatch.setattr(smoke, "_smoke", lambda package_dir, label, spec: calls.append((label, spec)) or [])
+    assert smoke.main(["--package-dir", str(built_typescript), "--registry", "--version", "0.1.0"]) == 0
+    assert calls == [(f"{NAME}@0.1.0 from npm", f"{NAME}@0.1.0")]
+
+
+def test_registry_version_npm_never_lists_is_a_problem(built_typescript: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(smoke, "wait_for_version", lambda name, version: None)
+    assert smoke.smoke_registry(built_typescript, "0.1.0") == [f"npm doesn't list {NAME}@0.1.0"]
+
+
+@pytest.mark.parametrize("args", [["--registry"], ["--version", "0.1.0"]])
+def test_registry_and_version_go_together(built_typescript: Path, args: list[str]) -> None:
+    with pytest.raises(SystemExit):
+        smoke.main(["--package-dir", str(built_typescript), *args])

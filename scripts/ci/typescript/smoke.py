@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Smoke-test one TypeScript package's npm tarball, as built by `make build`.
+"""Smoke-test one TypeScript package's npm tarball: as built by `make build`, or as published.
 
-Installs the tarball the way most users would: with `npm install`, into a new, empty project, with
+Installs the package the way most users would: with `npm install`, into a new, empty project, with
 only the package's declared dependencies, resolved to the newest compatible versions. It then
 checks that the package's entry points load, with both require() and import() (see
 _smoke_in_project.mjs).
@@ -24,7 +24,9 @@ but never its optional ones. So each smoke test has up to two installs, each in 
     dependencies, the base install does this instead)
 The conventions check rejects exports patterns such as "./*", so every subpath can be listed.
 
-Runs after `make build` on the CI matrix cell that builds the tarball.
+Runs after `make build` on the CI matrix cell that builds the tarball (--dist), and again after
+release-typescript.yml publishes it (--registry, with --version), which installs
+`<published name>@<version>` from npm, once npm lists it.
 
 Exits non-zero with a list of problems.
 """
@@ -41,6 +43,7 @@ import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from ci.typescript._registry import wait_for_version  # noqa: E402
 from lib.integration_toml import IntegrationMeta  # noqa: E402
 
 # Runs inside each smoke project.
@@ -56,6 +59,14 @@ def smoke(package_dir: Path, dist: Path) -> list[str]:
     if len(tarballs) != 1:
         return [f"expected exactly one tarball in {dist}, found {[t.name for t in tarballs]}"]
     return _smoke(package_dir, tarballs[0].name, str(tarballs[0].resolve()))
+
+
+def smoke_registry(package_dir: Path, version: str) -> list[str]:
+    """Smoke-test `version` of the package as published on npm."""
+    name = IntegrationMeta.from_file(package_dir / "integration.toml").published_name
+    if wait_for_version(name, version) is None:
+        return [f"npm doesn't list {name}@{version}"]
+    return _smoke(package_dir, f"{name}@{version} from npm", f"{name}@{version}")
 
 
 def _smoke(package_dir: Path, label: str, spec: str) -> list[str]:
@@ -108,7 +119,9 @@ def _check(installs: list[str], modules: list[str]) -> list[str]:
                 # version, and install scripts are how compromised npm packages usually attack. If a
                 # package ever needs one, run `npm rebuild <name>` here for each dependency its
                 # allowBuilds allows.
-                ["npm", "install", "--ignore-scripts", "--no-audit", "--no-fund", *installs],
+                # --prefer-online: revalidate npm's cached package metadata, which can be older than a
+                # version that was just published.
+                ["npm", "install", "--ignore-scripts", "--prefer-online", "--no-audit", "--no-fund", *installs],
                 cwd=project, env=env, check=True, capture_output=True, text=True,
             )
         except subprocess.CalledProcessError as exc:
@@ -132,17 +145,27 @@ def _unique(items: list[str]) -> list[str]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--package-dir", type=Path, required=True)
-    parser.add_argument("--dist", type=Path, default=None, help="defaults to <package-dir>/dist")
+    source = parser.add_mutually_exclusive_group()
+    source.add_argument("--dist", type=Path, default=None, help="defaults to <package-dir>/dist")
+    source.add_argument("--registry", action="store_true", help="test a version published on npm instead (needs --version)")
+    parser.add_argument("--version", help="the published version to test, with --registry")
     args = parser.parse_args(argv)
+    if args.registry != (args.version is not None):
+        parser.error("--registry and --version go together")
 
-    dist = args.dist or args.package_dir / "dist"
-    problems = smoke(args.package_dir, dist)
+    if args.registry:
+        where = f"version {args.version} on npm"
+        problems = smoke_registry(args.package_dir, args.version)
+    else:
+        dist = args.dist or args.package_dir / "dist"
+        where = f"the tarball in {dist}"
+        problems = smoke(args.package_dir, dist)
     if problems:
-        print(f"FAIL: {len(problems)} problem(s) smoke-testing the tarball in {dist}:")
+        print(f"FAIL: {len(problems)} problem(s) smoke-testing {where}:")
         for p in problems:
             print(f"  - {p}")
         return 1
-    print(f"OK: the tarball in {dist} passes the smoke test")
+    print(f"OK: {where} passes the smoke test")
     return 0
 
 

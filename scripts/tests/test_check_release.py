@@ -5,9 +5,10 @@ from pathlib import Path
 import pytest
 
 from ci import check_release
-from conftest import commit_all, make_go_package, make_python_package
+from conftest import commit_all, make_go_package, make_python_package, make_typescript_package
 from lib.languages.go import Go
 from lib.languages.python import Python
+from lib.languages import typescript
 from lib.release_version import ReleaseVersion
 
 TAG = "python/aws_lambda_worker/v0.1.0"
@@ -141,3 +142,46 @@ def test_main_still_checks_a_go_version_against_the_others(
     monkeypatch.setattr(Go, "published_versions", lambda self, published_name: ["0.1.0", "0.2.0"])
     assert check_release.main(["--language", "go", "--repo-root", str(repo), "go/aws/lambda/v0.1.0"]) == 1
     assert "0.1.0 must be greater than the newest published version, 0.2.0" in capsys.readouterr().out
+
+
+def run_typescript(repo: Path, monkeypatch: pytest.MonkeyPatch, published: list[str], version: str) -> int:
+    """Release `version` of a public-preview TypeScript package, with npm listing `published`."""
+    make_typescript_package(repo, maturity="public-preview")
+    packument = {"versions": dict.fromkeys(published, {}), "time": dict.fromkeys(["created", "modified", *published], "t")}
+    monkeypatch.setattr(typescript, "fetch_packument", lambda published_name: packument)
+    return check_release.main(
+        ["--language", "typescript", "--repo-root", str(repo), f"typescript/aws-lambda-worker/v{version}"]
+    )
+
+
+@pytest.mark.parametrize("published", [[], ["0.1.0-rc.1"]])
+def test_main_allows_a_typescript_first_version(
+    repo: Path, monkeypatch: pytest.MonkeyPatch, published: list[str]
+) -> None:
+    # npm can only set up trusted publishing for an existing package, so a new package's first
+    # version is published by hand before its release
+    assert run_typescript(repo, monkeypatch, published, "0.1.0-rc.1") == 0
+
+
+def test_main_still_checks_a_typescript_first_version_published_by_hand(
+    repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert run_typescript(repo, monkeypatch, ["0.2.0"], "0.2.0") == 1
+    assert "the first release of a public-preview package must be 0.1.0" in capsys.readouterr().out
+
+
+def test_main_rejects_an_already_published_typescript_version_after_the_first(
+    repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert run_typescript(repo, monkeypatch, ["0.1.0-rc.1", "0.1.0"], "0.1.0") == 1
+    assert "0.1.0 must be greater than the newest published version, 0.1.0" in capsys.readouterr().out
+
+
+def test_main_rejects_an_already_published_python_first_version(
+    repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # PyPI can set up trusted publishing before a package exists, so nothing is published by hand
+    make_python_package(repo, maturity="public-preview")
+    publish(monkeypatch, ["0.1.0"])
+    assert run(repo, TAG) == 1
+    assert "0.1.0 must be greater than the newest published version, 0.1.0" in capsys.readouterr().out

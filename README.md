@@ -76,7 +76,7 @@ The recommended steps to create a new release are as follows:
 
 1. Manually trigger a dry-run release CI workflow for the relevant language with the planned tag name,
    to confirm the validity of the release before the tag is actually created.
-   (TODO: only Python and Go have one so far) For example:
+   (TODO: only Python, Go, and TypeScript have one so far) For example:
 
    ```bash
    gh workflow run release-<language>-dry-run.yml --ref main -f tag=<language>/<package>/v<version>
@@ -105,7 +105,7 @@ The recommended steps to create a new release are as follows:
 4. Publish the release from the draft, letting GitHub create the specified tag.
 5. Monitor the CI workflows triggered automatically by the release publication, which will publish a
    new package version to the language-specific package registry (if relevant) and run smoke tests.
-   (TODO: only Python and Go have one so far)
+   (TODO: only Python, Go, and TypeScript have one so far)
    - If a job fails, re-run only the failed jobs, either on the run's page in GitHub Actions (click
      "Re-run jobs", then "Re-run failed jobs") or from the command line:
 

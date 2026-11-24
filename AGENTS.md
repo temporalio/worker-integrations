@@ -283,14 +283,14 @@ change the template, keep `go/_template/` and `scripts/lib/languages/go.py` in s
   (and their editor extensions) find a config only under its standard name, in the current folder
   or a parent; that way plain `pnpm exec oxlint` and `pnpm exec oxfmt` work in any package.
 - **Smoke test:** CI installs the built tarball with `npm install` into new, empty projects and
-  loads the package's entry points with both `require()` and `import()`. Optional peer
-  dependencies (`peerDependenciesMeta`) are features users opt into, since npm never installs them
-  on its own: the first install leaves them out and loads `root-api` and `integration.toml`'s
-  `[smoke] imports`, which must work without them; if there are any, a second install adds them
-  and loads every subpath in `exports` (without any, the first install loads every subpath). List
-  subpath exports that must work without optional peers in `[smoke] imports`. `exports` subpaths
-  are listed explicitly: patterns such as `./*` aren't allowed, since the smoke test couldn't load
-  them.
+  loads the package's entry points with both `require()` and `import()`. Releases run it again on
+  the version published to npm. Optional peer dependencies (`peerDependenciesMeta`) are features
+  users opt into, since npm never installs them on its own: the first install leaves them out and
+  loads `root-api` and `integration.toml`'s `[smoke] imports`, which must work without them; if
+  there are any, a second install adds them and loads every subpath in `exports` (without any, the
+  first install loads every subpath). List subpath exports that must work without optional peers
+  in `[smoke] imports`. `exports` subpaths are listed explicitly: patterns such as `./*` aren't
+  allowed, since the smoke test couldn't load them.
 
 ### Adding a TypeScript package
 
@@ -306,8 +306,9 @@ This creates `typescript/aws-lambda-worker/` from `typescript/_template/` and co
 script then prints the remaining steps: check that the name isn't already on npm, set the real
 minimum SDK version (a caret range in `package.json`, and the same range in the README), add
 other dependencies and run `pnpm install` (which creates `pnpm-lock.yaml`; commit it),
-`make lint` and `make test`. If you change the template, keep `typescript/_template/` and
-`scripts/lib/languages/typescript.py` in sync.
+`make lint` and `make test`, and set up the package on npm with its trusted publisher. If you
+change the template, keep `typescript/_template/` and `scripts/lib/languages/typescript.py` in
+sync.
 
 ## CI
 
@@ -351,19 +352,31 @@ other dependencies and run `pnpm install` (which creates `pnpm-lock.yaml`; commi
   published. It calls the dry-run workflow for the release's tag, checks that the tag is on `main`
   and that the release's pre-release flag matches `check_release.py`'s, then publishes the files
   the dry run built and tested (for Python, to TestPyPI and then PyPI, each followed by a smoke
-  test). Publishing uses trusted publishing (no stored credentials), so the publish jobs must be
-  in the release workflow itself, never in a reusable workflow, and they're the only jobs with
+  test). Publishing uses trusted publishing (no stored credentials), so the publish jobs must be in
+  the release workflow itself, never in a reusable workflow, and they're the only jobs with
   `id-token: write` (enforced by `scripts/tests/test_workflows.py`). Each package needs its own
   trusted publishers on PyPI and TestPyPI before its first release, set up by a PyPI organization
-  admin (see the next steps `scripts/new_package.py` prints). Go has nothing to upload: publishing
-  the GitHub release creates the tag, which is the release, so `release-go.yml` instead
-  smoke-tests the published module with `scripts/ci/go/smoke.py` (its vanity import page, the
-  module proxy and checksum database, and a build that imports it). Since a Go version is public
-  before its release workflow runs, `check_release.py` leaves the version itself out of the
-  published versions it compares against (`Language.tag_publishes`). Retry a failed release by
-  re-running only its failed jobs ("Re-run jobs" > "Re-run failed jobs" on the run's page in GitHub
-  Actions, or `gh run rerun <run ID> --failed`); if the workflow itself needs a fix, release the
-  next version. Runs for the same tag share a concurrency group, so they can't overlap.
+  admin (see the next steps `scripts/new_package.py` prints). npm can only set up trusted
+  publishing for a package that exists, so a new TypeScript package's first version, a pre-release,
+  is published by hand from its dry run's tarball by someone who can publish `@temporalio`
+  packages, who then sets up its trusted publisher. The next version must be released within 2
+  days, or the new trusted publisher expires (again, see the next steps). `check_release.py` allows
+  that first version to be on npm already (`Language.may_already_be_published`).
+  `release-typescript.yml` publishes the tested tarball to npm with the dist-tag `next` for a
+  pre-release version and `latest` otherwise. Before uploading,
+  `scripts/ci/typescript/check_published.py` checks whether npm already has the version (e.g. on
+  "Re-run failed jobs" after an upload): if it does, it must have exactly the tested bytes, and the
+  upload is skipped. A separate `verify-npm` job, which a re-run can retry without uploading again,
+  then waits for npm to list the version, checks its bytes the same way, and smoke-tests installing
+  it from npm with `scripts/ci/typescript/smoke.py`. Go has nothing to upload: publishing the
+  GitHub release creates the tag, which is the release, so `release-go.yml` instead smoke-tests the
+  published module with `scripts/ci/go/smoke.py` (its vanity import page, the module proxy and
+  checksum database, and a build that imports it). Since a Go version is public before its release
+  workflow runs, `check_release.py` leaves the version itself out of the published versions it
+  compares against (`Language.may_already_be_published`). Retry a failed release by re-running only
+  its failed jobs ("Re-run jobs" > "Re-run failed jobs" on the run's page in GitHub Actions, or
+  `gh run rerun <run ID> --failed`); if the workflow itself needs a fix, release the next version.
+  Runs for the same tag share a concurrency group, so they can't overlap.
 - `scripts/ci/check_conventions.py` checks repository invariants on every run.
 - `ci-status` is the only required check. Every other job in `ci.yml` must be listed in its
   `needs` (enforced by `scripts/tests/test_workflows.py`).
